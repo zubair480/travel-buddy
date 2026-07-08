@@ -176,6 +176,11 @@ export default function DiscoverPage() {
           <p className="eyebrow">Personalized discovery</p>
           <h1>What should I do in SF this week?</h1>
           <p className="lead">Backend-ranked recommendations tuned to your goals, neighborhoods, budget, and time window.</p>
+          <div className="actions">
+            <Link className="button secondary" href="/preferences">
+              Edit setup
+            </Link>
+          </div>
         </section>
 
         <FilterBar
@@ -203,7 +208,7 @@ export default function DiscoverPage() {
           <ErrorState
             label={error}
             action={
-              <Link className="button secondary" href="/onboarding">
+              <Link className="button secondary" href="/preferences">
                 Update profile
               </Link>
             }
@@ -215,7 +220,7 @@ export default function DiscoverPage() {
             title="No matches yet"
             body="Loosen a filter or update your onboarding profile to broaden the feed."
             action={
-              <Link className="button secondary" href="/onboarding">
+              <Link className="button secondary" href="/preferences">
                 Update profile
               </Link>
             }

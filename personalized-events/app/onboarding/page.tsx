@@ -317,11 +317,19 @@ export default function OnboardingPage() {
 
     if (profile.primaryGoals.length === 0) {
       setFormError("Choose at least one goal so recommendations have a strong direction.");
+      setActiveStep(0);
+      return;
+    }
+
+    if (preferences.interests.length === 0) {
+      setFormError("Choose at least one interest so the app can tune your recommendations.");
+      setActiveStep(1);
       return;
     }
 
     if (!profile.bio.trim() && !profile.resumeText.trim()) {
       setFormError("Add a short bio or CV summary so the app has useful context.");
+      setActiveStep(2);
       return;
     }
 
@@ -697,7 +705,7 @@ export default function OnboardingPage() {
                     Continue
                   </button>
                 ) : (
-                  <button className="button" type="button" disabled={isSaving || !stepReady} onClick={() => void saveProfile()}>
+                  <button className="button" type="button" disabled={isSaving} onClick={() => void saveProfile()}>
                     {isSaving ? "Saving..." : "Save and discover"}
                   </button>
                 )}
