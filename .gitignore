@@ -3,3 +3,6 @@
 work/
 outputs/signal-sf-production/data/
 outputs/sf-events-mvp/data/
+personalized-events/node_modules/
+personalized-events/.next/
+personalized-events/tsconfig.tsbuildinfo
