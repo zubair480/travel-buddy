@@ -11,12 +11,16 @@ interface EventCardProps {
   onAddToPlan?: (id: string) => void;
   isSaving?: boolean;
   isAddingToPlan?: boolean;
+  timeConflictCount?: number;
+  isTopTimeRecommendation?: boolean;
 }
 
-export function EventCard({ event, isSaved, onSaveToggle, onAddToPlan, isSaving, isAddingToPlan }: EventCardProps) {
+export function EventCard({ event, isSaved, onSaveToggle, onAddToPlan, isSaving, isAddingToPlan, timeConflictCount = 0, isTopTimeRecommendation = false }: EventCardProps) {
   const resolvedSaved = isSaved ?? event.saved ?? event.isSaved ?? false;
   const recommended = event.recommendation.score >= 0.55;
   const recommendationStatus = recommended ? "Recommended for you" : "Not strongly recommended";
+  const hasTimeConflict = timeConflictCount >= 2;
+  const sourceLabel = event.sourceLabel ?? "Source";
 
   return (
     <article className="card editorial-card">
@@ -46,9 +50,14 @@ export function EventCard({ event, isSaved, onSaveToggle, onAddToPlan, isSaving,
         <p className="subtle">{event.summary}</p>
         <div className="meta">
           <span>{formatDateLabel(event.startsAt)}</span>
-          <span>{formatTimeRange(event.startsAt, event.endsAt)}</span>
+          <span className={hasTimeConflict ? "time-conflict-chip" : ""}>{formatTimeRange(event.startsAt, event.endsAt)}</span>
           <span>{event.venueName}</span>
         </div>
+        {hasTimeConflict ? (
+          <div className={`time-conflict-note ${isTopTimeRecommendation ? "is-top" : ""}`}>
+            {timeConflictCount} events share this time. {isTopTimeRecommendation ? "This is your top recommended option." : "Another event is currently ranked higher for you."}
+          </div>
+        ) : null}
         <div className="why">{event.recommendation.label}</div>
         <div className="actions">
           <button className="button secondary" type="button" onClick={() => onSaveToggle?.(event.id)} disabled={!onSaveToggle || isSaving}>
@@ -57,6 +66,11 @@ export function EventCard({ event, isSaved, onSaveToggle, onAddToPlan, isSaving,
           <button className="button" type="button" onClick={() => onAddToPlan?.(event.id)} disabled={!onAddToPlan || isAddingToPlan}>
             {isAddingToPlan ? "Adding..." : "Add to plan"}
           </button>
+          {event.sourceUrl ? (
+            <Link className="button secondary compact source-link-button" href={event.sourceUrl} target="_blank" rel="noreferrer">
+              Open on {sourceLabel}
+            </Link>
+          ) : null}
         </div>
       </div>
     </article>

@@ -10,8 +10,26 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onChange }: FilterBarProps) {
+  function addDays(dateIso: string, days: number) {
+    const base = new Date(dateIso);
+    if (Number.isNaN(base.getTime())) return "";
+    const next = new Date(base);
+    next.setDate(next.getDate() + days);
+    return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
+  }
+
   function updateDateRange(patch: Partial<Pick<EventFilters, "startDate" | "endDate">>) {
-    onChange({ ...filters, date: "", ...patch });
+    const next = { ...filters, date: "", ...patch };
+
+    if (patch.startDate && !patch.endDate && !filters.endDate) {
+      next.endDate = addDays(patch.startDate, 6);
+    }
+
+    if (next.startDate && next.endDate && next.endDate < next.startDate) {
+      next.endDate = addDays(next.startDate, 6);
+    }
+
+    onChange(next);
   }
 
   function resetToThisWeek() {

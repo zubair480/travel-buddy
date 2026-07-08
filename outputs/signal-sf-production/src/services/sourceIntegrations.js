@@ -236,8 +236,13 @@ async function fetchPublicJsonLdProvider(provider, sourceConfig) {
   if (!sourceConfig.scrapeEventUrls?.length) {
     return { provider, imported: [], skipped: true, reason: "SCRAPE_EVENT_URLS is not configured" };
   }
-  const batches = await Promise.all(sourceConfig.scrapeEventUrls.map(async (url) => parseJsonLdEvents(await fetchText(url), provider, url)));
-  return { provider, imported: batches.flat() };
+  const batches = await Promise.all(
+    sourceConfig.scrapeEventUrls.map(async (url) => {
+      const html = await fetchText(url);
+      return dedupeRecords([...parseJsonLdEvents(html, provider, url), ...parseEmbeddedEventJson(html, provider, url)]);
+    }),
+  );
+  return { provider, imported: dedupeRecords(batches.flat()) };
 }
 
 async function fetchBrightDataProvider(sourceConfig) {
@@ -837,22 +842,52 @@ function stripHtml(value = "") {
   return String(value).replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
 }
 
+function escapeRegex(value = "") {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function containsKeyword(text, keyword) {
+  const words = String(keyword)
+    .trim()
+    .split(/\s+/)
+    .map((part) => escapeRegex(part))
+    .filter(Boolean);
+  if (!words.length) return false;
+  const pattern = `\\b${words.join("\\s+")}\\b`;
+  return new RegExp(pattern, "i").test(String(text));
+}
+
+function containsAnyKeyword(text, keywords = []) {
+  return keywords.some((keyword) => containsKeyword(text, keyword));
+}
+
 function inferCategory(text = "") {
-  const value = String(text).toLowerCase();
-  if (value.includes("founder") || value.includes("startup") || value.includes("ai") || value.includes("tech")) return "tech";
-  if (value.includes("music") || value.includes("concert") || value.includes("jazz")) return "music";
-  if (value.includes("food") || value.includes("dinner") || value.includes("brunch")) return "food";
-  if (value.includes("comedy")) return "comedy";
-  if (value.includes("art") || value.includes("gallery")) return "art";
-  if (value.includes("film") || value.includes("movie")) return "film";
-  if (value.includes("run") || value.includes("hike") || value.includes("outdoor")) return "outdoors";
-  if (value.includes("wellness") || value.includes("breathwork") || value.includes("yoga")) return "wellness";
+  const value = String(text);
+  if (containsAnyKeyword(value, ["founder", "founders", "startup", "startups", "ai", "tech", "technology", "hackathon", "engineering"])) return "tech";
+  if (containsAnyKeyword(value, ["music", "concert", "jazz", "dj", "live set"])) return "music";
+  if (containsAnyKeyword(value, ["food", "dinner", "brunch", "market", "night market", "tasting"])) return "food";
+  if (containsAnyKeyword(value, ["comedy", "standup", "improv"])) return "comedy";
+  if (containsAnyKeyword(value, ["art", "gallery", "museum", "exhibit"])) return "art";
+  if (containsAnyKeyword(value, ["film", "movie", "cinema", "screening"])) return "film";
+  if (containsAnyKeyword(value, ["run", "hike", "outdoor", "outdoors", "trail"])) return "outdoors";
+  if (containsAnyKeyword(value, ["wellness", "breathwork", "yoga", "meditation"])) return "wellness";
   return "community";
 }
 
 function inferTags(text = "") {
-  const value = String(text).toLowerCase();
-  return ["ai", "founders", "networking", "startup", "music", "food", "art", "wellness", "outdoor"].filter((tag) => value.includes(tag));
+  const value = String(text);
+  const tagMatchers = [
+    { tag: "ai", keywords: ["ai", "artificial intelligence"] },
+    { tag: "founders", keywords: ["founder", "founders"] },
+    { tag: "networking", keywords: ["networking", "mixer", "meetup"] },
+    { tag: "startup", keywords: ["startup", "startups", "founder"] },
+    { tag: "music", keywords: ["music", "concert", "jazz", "dj"] },
+    { tag: "food", keywords: ["food", "dinner", "brunch", "night market", "tasting"] },
+    { tag: "art", keywords: ["art", "gallery", "museum", "exhibit"] },
+    { tag: "wellness", keywords: ["wellness", "yoga", "meditation", "breathwork"] },
+    { tag: "outdoor", keywords: ["outdoor", "outdoors", "hike", "trail", "run"] },
+  ];
+  return tagMatchers.filter((item) => containsAnyKeyword(value, item.keywords)).map((item) => item.tag);
 }
 
 function inferPriceText(text = "") {

@@ -297,3 +297,30 @@ test("Eventbrite filtering applies to non-.com domains and agenda snippets", () 
 
   assert.equal(records.length, 0);
 });
+
+test("parseEmbeddedEventJson avoids substring false-positives like 'Chinatown' -> 'ai'", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      window.__APP_DATA__ = {
+        "events": [{
+          "id": "food-crawl-1",
+          "title": "Chinatown Night Market Food Crawl",
+          "start_date": "2026-07-10",
+          "start_time": "19:00",
+          "description": "Explore local food stalls and community spots.",
+          "venue": {
+            "name": "Dragon Gate",
+            "address": { "localized_address_display": "Chinatown, San Francisco, CA" }
+          },
+          "url": "https://www.meetup.com/baysocials/events/315159895/"
+        }]
+      };
+    </script></html>`,
+    "sf-feed",
+    "https://www.meetup.com/find/?location=us--ca--San%20Francisco&source=EVENTS",
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].category, "food");
+  assert.ok(!records[0].tags.includes("ai"));
+});

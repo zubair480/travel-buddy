@@ -106,6 +106,65 @@ export default function DiscoverPage() {
     });
   }, [cards, filters.price]);
 
+  const recommendedCount = useMemo(() => visibleCards.filter((event) => event.recommendation.score >= 0.55).length, [visibleCards]);
+  const focusRatio = visibleCards.length ? Math.round((recommendedCount / visibleCards.length) * 100) : 0;
+  const routePreview = useMemo(() => {
+    const candidates = visibleCards
+      .filter((event) => event.venueName || event.address)
+      .slice(0, 2);
+    if (candidates.length < 2) return null;
+
+    const stopLabel = (event: EventCardType) => {
+      const address = event.address?.trim();
+      if (address && address.toLowerCase() !== "address tba") return `${event.venueName}, ${address}`;
+      return `${event.venueName}, San Francisco`;
+    };
+
+    const origin = stopLabel(candidates[0]);
+    const destination = stopLabel(candidates[1]);
+    const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
+    const embedUrl = `https://maps.google.com/maps?output=embed&saddr=${encodeURIComponent(origin)}&daddr=${encodeURIComponent(destination)}`;
+
+    return {
+      first: candidates[0],
+      second: candidates[1],
+      directionsUrl,
+      embedUrl,
+    };
+  }, [visibleCards]);
+
+  const timeConflictMeta = useMemo(() => {
+    const byStartSlot = new Map<string, EventCardType[]>();
+    const toSlotKey = (iso: string) => {
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return "";
+      const day = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+      const hm = `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+      return `${day} ${hm}`;
+    };
+
+    for (const event of visibleCards) {
+      const slot = toSlotKey(event.startsAt);
+      if (!slot) continue;
+      const list = byStartSlot.get(slot) ?? [];
+      list.push(event);
+      byStartSlot.set(slot, list);
+    }
+
+    const meta = new Map<string, { count: number; isTop: boolean }>();
+    for (const group of byStartSlot.values()) {
+      if (group.length < 2) continue;
+      const topScore = Math.max(...group.map((event) => event.recommendation.score));
+      for (const event of group) {
+        meta.set(event.id, {
+          count: group.length,
+          isTop: event.recommendation.score >= topScore,
+        });
+      }
+    }
+    return meta;
+  }, [visibleCards]);
+
   async function toggleSaved(eventId: string) {
     const existing = cards.find((event) => event.id === eventId);
     if (!existing) return;
@@ -172,14 +231,43 @@ export default function DiscoverPage() {
   return (
     <AppShell>
       <RequireAuth>
-        <section>
-          <p className="eyebrow">Personalized discovery</p>
-          <h1>What should I do in SF this week?</h1>
-          <p className="lead">Backend-ranked recommendations tuned to your goals, neighborhoods, budget, and time window.</p>
-          <div className="actions">
-            <Link className="button secondary" href="/preferences">
-              Edit setup
-            </Link>
+        <section className="discover-hero">
+          <div>
+            <p className="eyebrow">Personalized discovery</p>
+            <h1>What should I do in SF this week?</h1>
+            <p className="lead">A calmer discovery flow: fewer noisy choices, stronger matches, and clearer reasoning behind each suggestion.</p>
+            <div className="actions">
+              <Link className="button secondary" href="/preferences">
+                Edit setup
+              </Link>
+            </div>
+          </div>
+          <aside className="discover-hero-card">
+            <p className="eyebrow">Decision confidence</p>
+            <h3>{recommendedCount} strong matches right now</h3>
+            <p className="subtle">We prioritize events that align with your goals, timing, neighborhood comfort, and budget fit.</p>
+            <div className="discover-meter">
+              <div className="discover-meter-fill" style={{ width: `${focusRatio}%` }} />
+            </div>
+            <div className="pill-row">
+              <span className="chip">Focus score: {focusRatio}%</span>
+              <span className="chip">{visibleCards.length} events in feed</span>
+            </div>
+          </aside>
+        </section>
+
+        <section className="discover-strip" aria-label="Feed principles">
+          <div className="discover-strip-item">
+            <strong>Clarity first</strong>
+            <span>Each card surfaces when, where, and why it fits.</span>
+          </div>
+          <div className="discover-strip-item">
+            <strong>Less decision fatigue</strong>
+            <span>Recommendations are pre-ranked so your top options appear first.</span>
+          </div>
+          <div className="discover-strip-item">
+            <strong>Trust signals</strong>
+            <span>Source labels make it obvious which platform each event comes from.</span>
           </div>
         </section>
 
@@ -189,6 +277,39 @@ export default function DiscoverPage() {
           neighborhoodOptions={neighborhoodOptions(neighborhoods)}
           onChange={setFilters}
         />
+
+        {routePreview ? (
+          <section className="route-preview" aria-label="Route preview">
+            <div className="route-preview-head">
+              <div>
+                <p className="eyebrow">Next Feature: Route map</p>
+                <h3>Your first event is at {routePreview.first.venueName}, then next at {routePreview.second.venueName}</h3>
+                <p className="subtle">This uses your current ranking order so you can move from top pick to next best with less planning friction.</p>
+              </div>
+              <Link className="button secondary" href={routePreview.directionsUrl} target="_blank" rel="noreferrer">
+                Open in Maps
+              </Link>
+            </div>
+            <div className="route-preview-grid">
+              <div className="route-stops">
+                <div className="route-stop">
+                  <strong>1. {routePreview.first.title}</strong>
+                  <span>{routePreview.first.venueName}</span>
+                  <span>{routePreview.first.address || "San Francisco"}</span>
+                </div>
+                <div className="route-arrow">→</div>
+                <div className="route-stop">
+                  <strong>2. {routePreview.second.title}</strong>
+                  <span>{routePreview.second.venueName}</span>
+                  <span>{routePreview.second.address || "San Francisco"}</span>
+                </div>
+              </div>
+              <div className="route-map-frame">
+                <iframe title="Event route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+              </div>
+            </div>
+          </section>
+        ) : null}
 
         {lanes.length > 0 ? (
           <section className="lane-row" aria-label="Recommendation lanes">
@@ -237,6 +358,8 @@ export default function DiscoverPage() {
                 onAddToPlan={addToPlan}
                 isSaving={pendingSaveId === event.id}
                 isAddingToPlan={pendingPlanId === event.id}
+                timeConflictCount={timeConflictMeta.get(event.id)?.count ?? 0}
+                isTopTimeRecommendation={timeConflictMeta.get(event.id)?.isTop ?? false}
               />
             ))}
           </section>

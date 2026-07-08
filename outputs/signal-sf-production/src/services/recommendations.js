@@ -93,6 +93,7 @@ const GOAL_CATEGORY_BOOSTS = {
   learn: ["tech", "community", "wellness", "film"],
   find_job: ["tech", "community"],
   build_startup: ["tech", "community", "nightlife"],
+  socialize: ["community", "food", "music", "nightlife", "art", "outdoors"],
   connect_in_tech: ["tech", "community", "nightlife"],
   hire_people: ["tech", "community"],
   find_cofounder: ["tech", "community", "art"],

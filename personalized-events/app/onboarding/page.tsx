@@ -13,6 +13,7 @@ const goalOptions = [
   ["learn", "Learn"],
   ["find_job", "Find a job"],
   ["build_startup", "Build a startup"],
+  ["socialize", "Find social events"],
   ["connect_in_tech", "Meet people in tech"],
   ["find_cofounder", "Find a cofounder"],
   ["hire_people", "Hire people"],
@@ -41,6 +42,29 @@ const socialOptions: Array<[SocialContext, string]> = [
 ];
 
 const starterProfiles = [
+  {
+    id: "social",
+    label: "I want social events",
+    description: "Meet people, discover lively scenes, and build a local social routine.",
+    profile: {
+      currentStage: "exploring",
+      experienceLevel: "intermediate",
+      primaryGoals: ["socialize", "connect_in_tech"],
+      targetRoles: ["community builder"],
+      skills: ["communication", "community"],
+      networkingIntent: "Meet friendly people and grow a local circle in San Francisco.",
+      preferredCompanyStage: "community-first",
+      bio: "Looking for meaningful social events and local community experiences in SF.",
+    },
+    preferences: {
+      interests: ["community", "food", "music", "nightlife"],
+      preferredNeighborhoodSlugs: ["mission", "north-beach", "hayes-valley"],
+      preferredDaysOfWeek: ["friday", "saturday", "sunday"],
+      preferredDayParts: ["evening", "late_night"],
+      budget: "under75" as BudgetLevel,
+      groupContext: "friends" as SocialContext,
+    },
+  },
   {
     id: "student",
     label: "I am a student",
@@ -149,6 +173,25 @@ const bioSuggestions = [
   "Early-stage founder looking for community, talent, and useful startup conversations.",
 ];
 
+const goalInterestSuggestions: Record<string, string[]> = {
+  learn: ["tech", "community", "art"],
+  find_job: ["tech", "community"],
+  build_startup: ["tech", "community", "nightlife"],
+  socialize: ["community", "food", "music", "nightlife", "art"],
+  connect_in_tech: ["tech", "community"],
+  find_cofounder: ["tech", "community", "art"],
+  hire_people: ["tech", "community"],
+};
+
+const stageInterestSuggestions: Record<string, string[]> = {
+  student: ["tech", "community", "art"],
+  "job-search": ["tech", "community"],
+  founder: ["tech", "community", "nightlife"],
+  exploring: ["community", "food", "art"],
+  operator: ["tech", "community"],
+  "career-change": ["tech", "community", "wellness"],
+};
+
 const fallbackProfile: UserProfile = {
   onboardingCompleted: false,
   primaryGoals: [],
@@ -248,11 +291,75 @@ export default function OnboardingPage() {
 
   const suggestedCategories = useMemo(() => {
     if (!profile) return [];
-    if (profile.currentStage === "student") return ["tech", "community", "art"];
-    if (profile.primaryGoals.includes("find_job")) return ["tech", "community"];
-    if (profile.primaryGoals.includes("build_startup")) return ["tech", "community", "nightlife"];
-    return ["tech", "food", "community"];
-  }, [profile]);
+    const suggestions = new Set<string>();
+    for (const category of stageInterestSuggestions[profile.currentStage] ?? []) suggestions.add(category);
+    for (const goal of profile.primaryGoals) {
+      for (const category of goalInterestSuggestions[goal] ?? []) suggestions.add(category);
+    }
+    if ((preferences?.groupContext ?? "") === "family") {
+      suggestions.add("family");
+      suggestions.add("community");
+    }
+    if (!suggestions.size) {
+      suggestions.add("tech");
+      suggestions.add("food");
+      suggestions.add("community");
+    }
+    return Array.from(suggestions).slice(0, 6);
+  }, [preferences?.groupContext, profile]);
+
+  const smartSuggestions = useMemo(() => {
+    if (!profile || !preferences) return null;
+
+    const interests = new Set<string>(suggestedCategories);
+    const preferredDays = new Set<string>((preferences.preferredDaysOfWeek ?? []).map(String));
+    const preferredDayParts = new Set<string>(preferences.preferredDayParts ?? []);
+    let suggestedGroupContext = preferences.groupContext;
+
+    if (profile.primaryGoals.includes("find_job")) {
+      preferredDays.add("weekday");
+      preferredDays.add("friday");
+      preferredDayParts.add("evening");
+      suggestedGroupContext = profile.primaryGoals.includes("socialize") ? "friends" : "solo";
+    }
+
+    if (profile.primaryGoals.includes("build_startup") || profile.primaryGoals.includes("find_cofounder")) {
+      preferredDays.add("friday");
+      preferredDays.add("saturday");
+      preferredDayParts.add("evening");
+      interests.add("tech");
+      interests.add("community");
+    }
+
+    if (profile.primaryGoals.includes("socialize")) {
+      preferredDays.add("friday");
+      preferredDays.add("saturday");
+      preferredDays.add("sunday");
+      preferredDayParts.add("evening");
+      preferredDayParts.add("late_night");
+      interests.add("community");
+      interests.add("food");
+      interests.add("music");
+      interests.add("nightlife");
+      suggestedGroupContext = "friends";
+    }
+
+    if (profile.currentStage === "student") {
+      preferredDays.add("weekday");
+      preferredDayParts.add("afternoon");
+      preferredDayParts.add("evening");
+      interests.add("tech");
+      interests.add("community");
+      interests.add("art");
+    }
+
+    return {
+      interests: Array.from(interests).slice(0, 8),
+      preferredDaysOfWeek: Array.from(preferredDays),
+      preferredDayParts: Array.from(preferredDayParts),
+      groupContext: suggestedGroupContext,
+    };
+  }, [preferences, profile, suggestedCategories]);
 
   const setupSummary = useMemo(() => {
     if (!profile || !preferences) return [];
@@ -307,6 +414,18 @@ export default function OnboardingPage() {
     });
     setBudget(starter.preferences.budget);
     setActiveStep(1);
+  };
+
+  const applySmartSuggestions = () => {
+    if (!preferences || !smartSuggestions) return;
+    setPreferences({
+      ...preferences,
+      interests: mergeUnique(preferences.interests, smartSuggestions.interests),
+      preferredDaysOfWeek: mergeUnique((preferences.preferredDaysOfWeek ?? []).map(String), smartSuggestions.preferredDaysOfWeek),
+      preferredDayParts: mergeUnique(preferences.preferredDayParts ?? [], smartSuggestions.preferredDayParts),
+      groupContext: smartSuggestions.groupContext as SocialContext,
+    });
+    setMessage("Smart suggestions applied. Your feed should feel more relevant.");
   };
 
   const saveProfile = async () => {
@@ -467,6 +586,21 @@ export default function OnboardingPage() {
                         <p className="subtle">These preferences decide which events show up first before the user even starts browsing.</p>
                       </div>
                     </div>
+                    {smartSuggestions ? (
+                      <>
+                        <div className="summary-list">
+                          <div className="summary-item">Suggested interests: {smartSuggestions.interests.join(", ")}</div>
+                          <div className="summary-item">Suggested days: {smartSuggestions.preferredDaysOfWeek.join(", ") || "Any day"}</div>
+                          <div className="summary-item">Suggested timing: {smartSuggestions.preferredDayParts.join(", ") || "Any time"}</div>
+                          <div className="summary-item">Suggested group context: {smartSuggestions.groupContext}</div>
+                        </div>
+                        <div className="actions">
+                          <button className="button secondary" type="button" onClick={applySmartSuggestions}>
+                            Apply smart suggestions
+                          </button>
+                        </div>
+                      </>
+                    ) : null}
                     <div className="summary-list">
                       {setupSummary.map((item) => (
                         <div className="summary-item" key={item}>

@@ -30,7 +30,7 @@ html {
 
 body {
   margin: 0;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  font-family: "Manrope", "Avenir Next", "Segoe UI", "Helvetica Neue", sans-serif;
   min-height: 100vh;
   overflow-x: hidden;
 }
@@ -224,7 +224,7 @@ p {
 
 h1,
 .display {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
   font-size: clamp(46px, 7vw, 92px);
   letter-spacing: -0.04em;
   line-height: 0.92;
@@ -233,7 +233,7 @@ h1,
 }
 
 h2 {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: "Fraunces", "Iowan Old Style", "Palatino Linotype", serif;
   font-size: clamp(32px, 4vw, 52px);
   letter-spacing: -0.03em;
   line-height: 1;
@@ -244,13 +244,154 @@ h3 {
   font-size: 20px;
   line-height: 1.2;
   margin-bottom: 8px;
+  letter-spacing: -0.01em;
 }
 
 .lead {
   color: #3c443f;
   font-size: 21px;
-  line-height: 1.65;
+  line-height: 1.7;
   max-width: 660px;
+}
+
+.discover-hero {
+  align-items: flex-start;
+  display: grid;
+  gap: 20px;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.48fr);
+}
+
+.discover-hero-card {
+  background:
+    linear-gradient(160deg, rgba(255, 253, 248, 0.92), rgba(237, 246, 241, 0.9)),
+    radial-gradient(circle at top right, rgba(110, 167, 170, 0.22), transparent 46%);
+  border: 1px solid rgba(31, 93, 84, 0.2);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  padding: 18px;
+}
+
+.discover-hero-card h3 {
+  margin-bottom: 4px;
+}
+
+.discover-meter {
+  background: rgba(31, 93, 84, 0.11);
+  border-radius: 999px;
+  height: 10px;
+  margin: 14px 0 12px;
+  overflow: hidden;
+}
+
+.discover-meter-fill {
+  background: linear-gradient(90deg, #1f5d54, #67a9a8);
+  border-radius: 999px;
+  height: 100%;
+  transition: width 220ms ease;
+}
+
+.discover-strip {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 12px 0 4px;
+}
+
+.discover-strip-item {
+  background: rgba(255, 252, 247, 0.82);
+  border: 1px solid rgba(222, 214, 201, 0.86);
+  border-radius: 16px;
+  display: grid;
+  gap: 5px;
+  min-height: 108px;
+  padding: 14px;
+}
+
+.discover-strip-item strong {
+  color: var(--cypress-dark);
+  font-size: 15px;
+}
+
+.discover-strip-item span {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.route-preview {
+  background:
+    linear-gradient(140deg, rgba(255, 252, 247, 0.92), rgba(238, 247, 243, 0.9)),
+    radial-gradient(circle at top right, rgba(110, 167, 170, 0.16), transparent 44%);
+  border: 1px solid rgba(31, 93, 84, 0.2);
+  border-radius: 22px;
+  box-shadow: var(--shadow-soft);
+  margin: 14px 0 22px;
+  padding: 18px;
+}
+
+.route-preview-head {
+  align-items: flex-start;
+  display: flex;
+  gap: 14px;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.route-preview-head h3 {
+  margin: 4px 0 6px;
+}
+
+.route-preview-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: minmax(260px, 0.42fr) minmax(0, 0.58fr);
+}
+
+.route-stops {
+  align-items: center;
+  background: rgba(255, 255, 255, 0.72);
+  border: 1px solid rgba(222, 214, 201, 0.88);
+  border-radius: 16px;
+  display: grid;
+  gap: 10px;
+  padding: 14px;
+}
+
+.route-stop {
+  display: grid;
+  gap: 2px;
+}
+
+.route-stop strong {
+  color: var(--cypress-dark);
+  font-size: 14px;
+}
+
+.route-stop span {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.route-arrow {
+  color: var(--cypress);
+  font-size: 22px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.route-map-frame {
+  border: 1px solid rgba(222, 214, 201, 0.86);
+  border-radius: 16px;
+  min-height: 260px;
+  overflow: hidden;
+}
+
+.route-map-frame iframe {
+  border: 0;
+  display: block;
+  height: 100%;
+  min-height: 260px;
+  width: 100%;
 }
 
 .actions {
@@ -351,6 +492,13 @@ h3 {
   border-radius: 24px;
   box-shadow: var(--shadow);
   backdrop-filter: blur(16px);
+  transition: transform 180ms ease, box-shadow 180ms ease, border-color 180ms ease;
+}
+
+.card:hover {
+  border-color: rgba(31, 93, 84, 0.3);
+  box-shadow: 0 28px 60px rgba(31, 35, 32, 0.14);
+  transform: translateY(-3px);
 }
 
 .panel,
@@ -373,6 +521,7 @@ h3 {
   background: var(--bay);
   object-fit: cover;
   width: 100%;
+  filter: saturate(1.05) contrast(1.02);
 }
 
 .event-visual-fallback {
@@ -489,9 +638,39 @@ h3 {
   border-radius: 14px;
   color: #613126;
   font-size: 13px;
-  line-height: 1.45;
+  line-height: 1.5;
   margin-top: 12px;
   padding: 10px 12px;
+}
+
+.time-conflict-chip {
+  background: rgba(223, 92, 56, 0.12);
+  border: 1px solid rgba(223, 92, 56, 0.45);
+  border-radius: 999px;
+  color: #7c2f1f;
+  padding: 4px 10px;
+}
+
+.time-conflict-note {
+  background: rgba(197, 138, 40, 0.14);
+  border: 1px solid rgba(197, 138, 40, 0.32);
+  border-radius: 12px;
+  color: #5d4210;
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.45;
+  margin-top: 10px;
+  padding: 8px 10px;
+}
+
+.time-conflict-note.is-top {
+  background: rgba(31, 93, 84, 0.14);
+  border-color: rgba(31, 93, 84, 0.35);
+  color: var(--cypress-dark);
+}
+
+.source-link-button {
+  white-space: nowrap;
 }
 
 .toolbar {
@@ -589,7 +768,7 @@ h3 {
 }
 
 .sticky-panel {
-  align-self: start;
+  align-self: flex-start;
   position: sticky;
   top: 96px;
 }
@@ -658,7 +837,7 @@ h3 {
 }
 
 .timeline-item {
-  align-items: start;
+  align-items: flex-start;
   background: white;
   border: 1px solid var(--line);
   border-left: 5px solid var(--cypress);
@@ -929,7 +1108,8 @@ h3 {
 @media (max-width: 1040px) {
   .hero,
   .split,
-  .auth-layout {
+  .auth-layout,
+  .discover-hero {
     grid-template-columns: 1fr;
   }
 
@@ -947,6 +1127,14 @@ h3 {
 
   .lane-row {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .discover-strip {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .route-preview-grid {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -996,8 +1184,13 @@ h3 {
   .hero,
   .grid.two,
   .grid.three,
-  .preset-grid {
+  .preset-grid,
+  .discover-strip {
     grid-template-columns: 1fr;
+  }
+
+  .route-preview-head {
+    flex-direction: column;
   }
 
   .hero {

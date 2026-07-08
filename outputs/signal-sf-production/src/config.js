@@ -6,6 +6,11 @@ const DEFAULT_PUBLIC_SF_FEED_URLS = [
   "https://lu.ma/sf",
 ];
 
+const DEFAULT_PUBLIC_SCRAPE_EVENT_URLS = [
+  "https://partiful.com/discover/san-francisco",
+  "https://partiful.com/discover",
+];
+
 export function getConfig(rootDir) {
   const brightDataBrowserWsEndpoint = buildBrightDataBrowserWsEndpoint({
     endpoint: process.env.BRIGHT_DATA_BROWSER_WS_ENDPOINT,
@@ -28,7 +33,7 @@ export function getConfig(rootDir) {
       cerebralValleyIcsUrls: parseListEnv(process.env.CEREBRAL_VALLEY_ICS_URLS),
       pieSocialIcsUrls: parseListEnv(process.env.PIE_SOCIAL_ICS_URLS),
       sfEventFeedUrls: parseListEnv(process.env.SF_EVENT_FEED_URLS, DEFAULT_PUBLIC_SF_FEED_URLS),
-      scrapeEventUrls: parseListEnv(process.env.SCRAPE_EVENT_URLS),
+      scrapeEventUrls: parseListEnv(process.env.SCRAPE_EVENT_URLS, DEFAULT_PUBLIC_SCRAPE_EVENT_URLS),
       enablePublicEventScraping: process.env.ENABLE_PUBLIC_EVENT_SCRAPING ? process.env.ENABLE_PUBLIC_EVENT_SCRAPING === "true" : true,
       brightDataBrowserWsEndpoint,
       brightDataSourceUrls: parseListEnv(process.env.BRIGHT_DATA_SOURCE_URLS),
