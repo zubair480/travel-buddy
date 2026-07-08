@@ -158,3 +158,45 @@ test("getRecommendations search matches imported venue and source text", () => {
   assert.ok(byVenue.data.some((entry) => entry.event.title === "SF Founder Hiring Night"));
   assert.ok(bySource.data.some((entry) => entry.event.title === "SF Founder Hiring Night"));
 });
+
+test("getRecommendations dedupes the same Eventbrite event across scraping providers", () => {
+  ingestSourceRecords([
+    {
+      provider: "bright-data",
+      providerEventId: "eventbrite-dedupe-test",
+      title: "SF Eventbrite Dedupe Night",
+      description: "Imported through Bright Data.",
+      category: "tech",
+      tags: ["eventbrite", "founders"],
+      startAt: "2026-07-10T18:00:00-07:00",
+      endAt: "2026-07-10T20:00:00-07:00",
+      venueName: "Dedupe Hall",
+      neighborhoodSlug: "soma",
+      sourceUrl: "https://www.eventbrite.com/e/sf-eventbrite-dedupe-night-tickets-987654321",
+      priceText: "Free",
+    },
+    {
+      provider: "scrapling",
+      providerEventId: "987654321",
+      title: "SF Eventbrite Dedupe Night",
+      description: "Imported through Scrapling.",
+      category: "tech",
+      tags: ["eventbrite", "founders"],
+      startAt: "2026-07-10T18:00:00-07:00",
+      endAt: "2026-07-10T20:00:00-07:00",
+      venueName: "Dedupe Hall",
+      neighborhoodSlug: "soma",
+      sourceUrl: "https://www.eventbrite.com/e/sf-eventbrite-dedupe-night-tickets-987654321",
+      priceText: "Free",
+    },
+  ]);
+
+  const payload = getRecommendations(
+    demoUser.id,
+    { q: "dedupe", startDate: "2026-07-08", endDate: "2026-07-14", categories: [], neighborhoodSlugs: [] },
+    "recommended",
+    { page: 1, pageSize: 20 },
+  );
+
+  assert.equal(payload.data.filter((entry) => entry.event.title === "SF Eventbrite Dedupe Night").length, 1);
+});

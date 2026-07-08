@@ -1,7 +1,9 @@
 .agents/
 .codex/
+__pycache__/
 work/
 outputs/signal-sf-production/data/
+outputs/signal-sf-production/.venv-scrapling/
 outputs/sf-events-mvp/data/
 personalized-events/node_modules/
 personalized-events/.next/

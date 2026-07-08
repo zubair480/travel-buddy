@@ -57,6 +57,56 @@ function paginate(items, { page = 1, pageSize = 20 } = {}) {
   };
 }
 
+function dedupeEventCards(cards) {
+  const byKey = new Map();
+  for (const card of cards) {
+    const key = canonicalEventKey(card);
+    const existing = byKey.get(key);
+    if (!existing || eventCardCompletenessScore(card) > eventCardCompletenessScore(existing)) {
+      byKey.set(key, card);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+function canonicalEventKey(card) {
+  const sourceUrl = card.event.sourceUrl;
+  if (sourceUrl && /^https?:\/\//i.test(sourceUrl)) {
+    try {
+      const url = new URL(sourceUrl);
+      const eventbriteId = extractEventbriteId(url.toString());
+      if (eventbriteId) return `eventbrite:${eventbriteId}`;
+      url.hash = "";
+      url.search = "";
+      return `url:${url.toString().replace(/\/$/, "")}`;
+    } catch {
+      // Fall back to title/date/venue below for non-canonical source values.
+    }
+  }
+
+  const date = String(card.event.startAt ?? "").slice(0, 10);
+  const venue = card.venue?.name ?? card.event.venueId ?? "";
+  return `event:${card.event.title.toLowerCase()}:${date}:${String(venue).toLowerCase()}`;
+}
+
+function extractEventbriteId(sourceUrl) {
+  if (!sourceUrl) return "";
+  const value = String(sourceUrl);
+  return value.match(/(?:tickets|registration|billets)-(\d+)(?:[/?#]|$)/)?.[1] ?? value.match(/-(\d{8,})(?:[/?#]|$)/)?.[1] ?? value.match(/[?&]eid=(\d+)/)?.[1] ?? "";
+}
+
+function eventCardCompletenessScore(card) {
+  return [
+    card.saved ? "saved" : "",
+    card.event.description,
+    card.event.imageUrl,
+    card.venue?.name,
+    card.event.endAt,
+    card.event.priceMinCents != null || card.event.priceMaxCents != null ? "price" : "",
+    card.event.sourceProvider === "eventbrite" ? "official" : "",
+  ].filter(Boolean).length;
+}
+
 function deriveProfileInsights(profile) {
   const sourceText = `${profile.bio ?? ""} ${profile.resumeText ?? ""} ${profile.networkingIntent ?? ""}`.toLowerCase();
   const keywords = ["ai", "frontend", "backend", "product", "design", "data", "founder", "community", "growth", "sales"];
@@ -98,7 +148,7 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
   const venues = listVenuesByIds([...new Set(events.map((item) => item.venueId).filter(Boolean))]);
   const venueMap = mapById(venues);
 
-  const cards = events.map((event) => {
+  const cards = dedupeEventCards(events.map((event) => {
     const neighborhood = neighborhoodMap.get(event.neighborhoodId) ?? null;
     const baseRecommendation = scoreEvent({
       event,
@@ -113,7 +163,7 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
       saved: savedIds.has(event.id),
       recommendation: applyProfileGoalBoost(baseRecommendation, event, profile),
     };
-  });
+  }));
 
   cards.sort((a, b) => {
     if (sort === "soonest") return new Date(a.event.startAt) - new Date(b.event.startAt);

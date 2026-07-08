@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseEmbeddedEventJson, parseIcsFeed, parseJsonLdEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
+import { listSourceProviders, parseEmbeddedEventJson, parseIcsFeed, parseJsonLdEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
 
 test("parseIcsFeed converts calendar events to ingestion records", () => {
   const records = parseIcsFeed(
@@ -229,4 +229,71 @@ test("parseEmbeddedEventJson keeps SF Eventbrite records without explicit city w
   assert.equal(records.length, 1);
   assert.equal(records[0].providerEventId, "1264432213789");
   assert.equal(records[0].venueName, "1417 15th St");
+});
+
+test("source provider metadata includes Scrapling configuration state", () => {
+  const providers = listSourceProviders({
+    sourceIngestion: {
+      enableScraplingScraping: true,
+      scraplingSourceUrls: ["https://lu.ma/sf"],
+    },
+  });
+
+  const scrapling = providers.find((provider) => provider.id === "scrapling");
+  assert.equal(scrapling?.configured, true);
+  assert.equal(scrapling?.mode, "scrapling_public_pages");
+});
+
+test("Scrapling parser path canonicalizes Eventbrite IDs", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      window.__SERVER_DATA__ = {
+        "events": [{
+          "name": "San Francisco Builder Night",
+          "start_date": "2026-07-15",
+          "start_time": "18:00",
+          "tickets_url": "https://www.eventbrite.com/e/san-francisco-builder-night-tickets-123456789",
+          "timezone": "America/Los_Angeles",
+          "primary_venue": {
+            "name": "Mission Hall",
+            "address": { "localized_address_display": "Mission St, San Francisco, CA" }
+          }
+        }]
+      };
+    </script></html>`,
+    "scrapling",
+    "https://www.eventbrite.com/d/ca--san-francisco/events/",
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].providerEventId, "123456789");
+  assert.equal(records[0].sourceUrl, "https://www.eventbrite.com/e/san-francisco-builder-night-tickets-123456789");
+});
+
+test("Eventbrite filtering applies to non-.com domains and agenda snippets", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      window.__SERVER_DATA__ = {
+        "events": [
+          {
+            "name": "Pubs, courriels et ventes : convertir avec l’IA",
+            "start_date": "2026-07-09",
+            "start_time": "13:00",
+            "tickets_url": "https://www.eventbrite.ca/e/billets-pubs-courriels-et-ventes-convertir-avec-lia-1990811706405",
+            "timezone": "America/Montreal"
+          },
+          {
+            "name": "Wired To Belong",
+            "startTime": "16:00",
+            "endTime": "17:30",
+            "description": "Agenda item without an event date."
+          }
+        ]
+      };
+    </script></html>`,
+    "scrapling",
+    "https://www.eventbrite.com/d/ca--san-francisco/events/",
+  );
+
+  assert.equal(records.length, 0);
 });

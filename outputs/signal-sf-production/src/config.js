@@ -28,6 +28,13 @@ export function getConfig(rootDir) {
       brightDataSourceUrls: parseListEnv(process.env.BRIGHT_DATA_SOURCE_URLS),
       enableBrightDataScraping: process.env.ENABLE_BRIGHT_DATA_SCRAPING === "true",
       brightDataMaxPages: Number(process.env.BRIGHT_DATA_MAX_PAGES ?? 12),
+      enableScraplingScraping: process.env.ENABLE_SCRAPLING_SCRAPING === "true",
+      scraplingSourceUrls: parseListEnv(process.env.SCRAPLING_SOURCE_URLS),
+      scraplingFetchMode: process.env.SCRAPLING_FETCH_MODE ?? "fetcher",
+      scraplingPythonBin: process.env.SCRAPLING_PYTHON_BIN ?? "python3",
+      scraplingTimeoutMs: Number(process.env.SCRAPLING_TIMEOUT_MS ?? 60000),
+      scraplingMaxPages: Number(process.env.SCRAPLING_MAX_PAGES ?? 12),
+      scraplingFetcherScriptPath: path.join(rootDir, "tools", "scrapling_fetch.py"),
     },
   };
 }

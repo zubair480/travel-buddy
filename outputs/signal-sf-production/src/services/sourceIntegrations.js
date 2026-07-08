@@ -1,3 +1,5 @@
+import { spawn } from "node:child_process";
+
 const SF_LAT = 37.7749;
 const SF_LON = -122.4194;
 const DEFAULT_RADIUS_MILES = 20;
@@ -43,6 +45,11 @@ const PROVIDERS = {
     mode: "rendered_public_pages",
     requires: ["BRIGHT_DATA_BROWSER_WS_ENDPOINT or BRIGHT_DATA_BROWSER_USERNAME/PASSWORD/HOST", "BRIGHT_DATA_SOURCE_URLS", "ENABLE_BRIGHT_DATA_SCRAPING=true"],
   },
+  scrapling: {
+    label: "Scrapling public page fetcher",
+    mode: "scrapling_public_pages",
+    requires: ["SCRAPLING_SOURCE_URLS", "ENABLE_SCRAPLING_SCRAPING=true", "Python package: scrapling[fetchers]"],
+  },
 };
 
 export function listSourceProviders(config) {
@@ -65,6 +72,7 @@ function isProviderConfigured(provider, sourceConfig) {
   if (provider === "bright-data") {
     return Boolean(sourceConfig.enableBrightDataScraping && sourceConfig.brightDataBrowserWsEndpoint && sourceConfig.brightDataSourceUrls?.length);
   }
+  if (provider === "scrapling") return Boolean(sourceConfig.enableScraplingScraping && sourceConfig.scraplingSourceUrls?.length);
   return false;
 }
 
@@ -83,6 +91,7 @@ export async function fetchSourceEvents({ config, providers = [], now = new Date
       else if (provider === "sf-feeds") results.push(await fetchConfiguredFeeds(sourceConfig.sfEventFeedUrls ?? []));
       else if (provider === "partiful") results.push(await fetchPublicJsonLdProvider("partiful", sourceConfig));
       else if (provider === "bright-data") results.push(await fetchBrightDataProvider(sourceConfig));
+      else if (provider === "scrapling") results.push(await fetchScraplingProvider(sourceConfig));
       else results.push({ provider, imported: [], skipped: true, reason: "Unknown provider" });
     } catch (error) {
       results.push({ provider, imported: [], error: error instanceof Error ? error.message : String(error) });
@@ -260,6 +269,73 @@ async function fetchBrightDataProvider(sourceConfig) {
   }
 
   return { provider: "bright-data", imported: dedupeRecords(imported), failures };
+}
+
+async function fetchScraplingProvider(sourceConfig) {
+  if (!sourceConfig.enableScraplingScraping) {
+    return { provider: "scrapling", imported: [], skipped: true, reason: "ENABLE_SCRAPLING_SCRAPING must be true" };
+  }
+  if (!sourceConfig.scraplingSourceUrls?.length) {
+    return { provider: "scrapling", imported: [], skipped: true, reason: "SCRAPLING_SOURCE_URLS is not configured" };
+  }
+
+  const maxPages = Number.isFinite(sourceConfig.scraplingMaxPages) ? sourceConfig.scraplingMaxPages : 12;
+  const urls = sourceConfig.scraplingSourceUrls.slice(0, Math.max(1, maxPages));
+  const imported = [];
+  const failures = [];
+
+  for (const url of urls) {
+    try {
+      const html = await fetchScraplingHtml(sourceConfig, url);
+      const jsonLdRecords = parseJsonLdEvents(html, "scrapling", url);
+      const embeddedRecords = parseEmbeddedEventJson(html, "scrapling", url);
+      imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords]));
+    } catch (error) {
+      failures.push({ url, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return { provider: "scrapling", imported: dedupeRecords(imported), failures };
+}
+
+function fetchScraplingHtml(sourceConfig, url) {
+  return new Promise((resolve, reject) => {
+    const pythonBin = sourceConfig.scraplingPythonBin || "python3";
+    const scriptPath = sourceConfig.scraplingFetcherScriptPath;
+    const child = spawn(pythonBin, [scriptPath], {
+      stdio: ["pipe", "pipe", "pipe"],
+      env: process.env,
+    });
+    const timeoutMs = Number.isFinite(sourceConfig.scraplingTimeoutMs) ? sourceConfig.scraplingTimeoutMs : 60000;
+    const timeout = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      child.kill("SIGTERM");
+      reject(new Error(`Scrapling timed out after ${timeoutMs}ms for ${url}`));
+    }, timeoutMs);
+    const stdout = [];
+    const stderr = [];
+    let settled = false;
+
+    child.stdout.on("data", (chunk) => stdout.push(chunk));
+    child.stderr.on("data", (chunk) => stderr.push(chunk));
+    child.on("error", (error) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      reject(error);
+    });
+    child.on("close", (code) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      const output = Buffer.concat(stdout).toString("utf8");
+      const errorOutput = Buffer.concat(stderr).toString("utf8").trim();
+      if (code === 0) resolve(output);
+      else reject(new Error(errorOutput || `Scrapling exited with code ${code}`));
+    });
+    child.stdin.end(JSON.stringify({ url, mode: sourceConfig.scraplingFetchMode || "fetcher" }));
+  });
 }
 
 async function fetchBrightDataRenderedHtml(chromium, endpoint, url) {
@@ -507,7 +583,7 @@ function hasEventShape(value) {
 function eventLikeObjectToRecord(event, provider, sourceUrl) {
   const title = firstString(readTextValue(event.name), event.title, event.eventName, event.summary);
   const startAt = readEventStart(event);
-  if (!title || !startAt) return null;
+  if (!title || !startAt || !hasDateComponent(startAt)) return null;
 
   const location = Array.isArray(event.location) ? event.location[0] : event.location;
   const venue = event.venue ?? event.primary_venue ?? location;
@@ -634,7 +710,7 @@ function recordCompletenessScore(record) {
 }
 
 function normalizeProviderEventId(provider, explicitId, sourceUrl) {
-  if (provider === "bright-data" && isEventbriteUrl(sourceUrl)) {
+  if ((provider === "bright-data" || provider === "scrapling") && isEventbriteUrl(sourceUrl)) {
     return extractEventbriteId(sourceUrl) || explicitId || sourceUrl;
   }
   return explicitId || sourceUrl || "";
@@ -643,17 +719,21 @@ function normalizeProviderEventId(provider, explicitId, sourceUrl) {
 function extractEventbriteId(sourceUrl) {
   if (!sourceUrl) return "";
   const value = String(sourceUrl);
-  return value.match(/tickets-(\d+)/)?.[1] ?? value.match(/[?&]eid=(\d+)/)?.[1] ?? "";
+  return value.match(/(?:tickets|registration|billets)-(\d+)(?:[/?#]|$)/)?.[1] ?? value.match(/-(\d{8,})(?:[/?#]|$)/)?.[1] ?? value.match(/[?&]eid=(\d+)/)?.[1] ?? "";
 }
 
 function isEventbriteUrl(sourceUrl) {
   if (!sourceUrl) return false;
   try {
     const hostname = new URL(sourceUrl).hostname;
-    return hostname === "www.eventbrite.com" || hostname === "eventbrite.com";
+    return /(^|\.)eventbrite\./.test(hostname);
   } catch {
     return false;
   }
+}
+
+function hasDateComponent(value) {
+  return /\d{4}-\d{2}-\d{2}/.test(String(value)) || /^\d{8}T?/.test(String(value));
 }
 
 function isLikelySanFranciscoEvent({ title, description, venue, address, timezone, source }) {
@@ -684,7 +764,7 @@ function flattenJsonLd(value) {
 }
 
 function jsonLdEventToRecord(event, provider, sourceUrl) {
-  if (!event.name || !event.startDate) return null;
+  if (!event.name || !event.startDate || !hasDateComponent(event.startDate)) return null;
   const location = Array.isArray(event.location) ? event.location[0] : event.location;
   const address = typeof location?.address === "string" ? location.address : [location?.address?.streetAddress, location?.address?.addressLocality].filter(Boolean).join(", ");
   const offers = Array.isArray(event.offers) ? event.offers[0] : event.offers;
