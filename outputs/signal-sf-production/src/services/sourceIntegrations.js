@@ -292,15 +292,29 @@ async function fetchScraplingProvider(sourceConfig) {
   for (const url of urls) {
     try {
       const html = await fetchScraplingHtml(sourceConfig, url);
-      const jsonLdRecords = parseJsonLdEvents(html, "scrapling", url);
-      const embeddedRecords = parseEmbeddedEventJson(html, "scrapling", url);
-      imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords]));
+      const provider = inferScrapedProvider(url);
+      const jsonLdRecords = parseJsonLdEvents(html, provider, url);
+      const embeddedRecords = parseEmbeddedEventJson(html, provider, url);
+      const partifulRecords = provider === "partiful" ? parsePartifulExploreEvents(html, url) : [];
+      imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords, ...partifulRecords]));
     } catch (error) {
       failures.push({ url, error: error instanceof Error ? error.message : String(error) });
     }
   }
 
   return { provider: "scrapling", imported: dedupeRecords(imported), failures };
+}
+
+function inferScrapedProvider(url) {
+  try {
+    const hostname = new URL(url).hostname;
+    if (hostname.includes("partiful.com")) return "partiful";
+    if (hostname.includes("eventbrite.")) return "scrapling";
+    if (hostname === "luma.com" || hostname === "lu.ma") return "luma";
+  } catch {
+    // Keep generic provider for malformed source values.
+  }
+  return "scrapling";
 }
 
 function fetchScraplingHtml(sourceConfig, url) {
@@ -491,6 +505,221 @@ export function parseEmbeddedEventJson(html, provider, sourceUrl) {
     }
   }
   return dedupeRecords(records);
+}
+
+export function parsePartifulExploreEvents(html, sourceUrl, now = new Date()) {
+  const anchorRecords = parsePartifulAnchorEvents(html, sourceUrl, now);
+  if (anchorRecords.length) return dedupeRecords(anchorRecords);
+
+  const lines = htmlToTextLines(html);
+  const eventUrls = extractPartifulEventUrls(html, sourceUrl);
+  const records = [];
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const inline = parsePartifulInlineLine(lines[index], now);
+    if (inline) {
+      records.push(partifulLineToRecord(inline, sourceUrl, eventUrls[records.length]));
+      continue;
+    }
+
+    const detail = parsePartifulDateLocationLine(lines[index + 1], now);
+    if (!detail) continue;
+    const title = cleanPartifulTitle(lines[index]);
+    if (!isLikelyPartifulTitle(title)) continue;
+    records.push(partifulLineToRecord({ ...detail, title, description: "" }, sourceUrl, eventUrls[records.length]));
+  }
+
+  return dedupeRecords(records.filter(Boolean));
+}
+
+function parsePartifulAnchorEvents(html, sourceUrl, now) {
+  const records = [];
+  for (const match of String(html ?? "").matchAll(/<a\b[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi)) {
+    const eventUrl = normalizeEventUrl(match[1], sourceUrl);
+    if (!eventUrl || !new URL(eventUrl).pathname.includes("/e/")) continue;
+    const lines = htmlToTextLines(match[2]);
+    const record = parsePartifulLines(lines, sourceUrl, eventUrl, now);
+    if (record) records.push(record);
+  }
+  return records;
+}
+
+function parsePartifulLines(lines, sourceUrl, eventUrl, now) {
+  for (let index = 0; index < lines.length; index += 1) {
+    const inline = parsePartifulInlineLine(lines[index], now);
+    if (inline) return partifulLineToRecord(inline, sourceUrl, eventUrl);
+
+    const detail = parsePartifulDateLocationLine(lines[index + 1], now);
+    if (!detail) continue;
+    const title = cleanPartifulTitle(lines[index]);
+    if (!isLikelyPartifulTitle(title)) continue;
+    const description = lines.slice(index + 2).filter((line) => !/^\d+\s+Interested$/i.test(line)).join(" ");
+    return partifulLineToRecord({ ...detail, title, description }, sourceUrl, eventUrl);
+  }
+  return null;
+}
+
+function htmlToTextLines(html) {
+  return decodeHtmlEntities(
+    String(html ?? "")
+      .replace(/<script\b[\s\S]*?<\/script>/gi, "\n")
+      .replace(/<style\b[\s\S]*?<\/style>/gi, "\n")
+      .replace(/<(br|\/p|\/div|\/a|\/h[1-6]|\/li|\/section)\b[^>]*>/gi, "\n")
+      .replace(/<[^>]+>/g, " "),
+  )
+    .split(/\n+/)
+    .map((line) => line.replace(/\s+/g, " ").trim())
+    .filter(Boolean);
+}
+
+function extractPartifulEventUrls(html, sourceUrl) {
+  const urls = [];
+  for (const match of String(html ?? "").matchAll(/href=["']([^"']*\/e\/[^"']+)["']/gi)) {
+    const normalized = normalizeEventUrl(match[1], sourceUrl);
+    if (normalized && !urls.includes(normalized)) urls.push(normalized);
+  }
+  return urls;
+}
+
+function parsePartifulInlineLine(line, now) {
+  const normalized = String(line ?? "").replace(/\s+/g, " ").trim();
+  const withoutInterest = normalized.replace(/^\d+\s+(?:Interested\s+)?/i, "");
+  const match = withoutInterest.match(
+    /^(.+?)\s+((?:Today|Tomorrow|Next\s+[A-Z][a-z]{2}|[A-Z][a-z]{2},\s+[A-Z][a-z]{2}\s+\d{1,2}|[A-Z][a-z]{2})\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm))\s+·\s+(San Francisco|Berkeley|Alameda|Oakland|Sonoma|Los Angeles|New York|Brooklyn|Santa Monica)(?:\s+(.+))?$/i,
+  );
+  if (!match) return null;
+  const [, title, dateLabel, location, description = ""] = match;
+  return buildPartifulParsedEvent({ title, dateLabel, location, description, now });
+}
+
+function parsePartifulDateLocationLine(line, now) {
+  const normalized = String(line ?? "").replace(/\s+/g, " ").trim();
+  const match = normalized.match(
+    /^((?:Today|Tomorrow|Next\s+[A-Z][a-z]{2}|[A-Z][a-z]{2},\s+[A-Z][a-z]{2}\s+\d{1,2}|[A-Z][a-z]{2})\s+at\s+\d{1,2}(?::\d{2})?\s*(?:am|pm))\s+·\s+(San Francisco|Berkeley|Alameda|Oakland|Sonoma|Los Angeles|New York|Brooklyn|Santa Monica)$/i,
+  );
+  if (!match) return null;
+  const [, dateLabel, location] = match;
+  return buildPartifulParsedEvent({ title: "", dateLabel, location, description: "", now });
+}
+
+function buildPartifulParsedEvent({ title, dateLabel, location, description, now }) {
+  const city = String(location ?? "").trim();
+  if (!/\bSan Francisco\b|\bSF\b/i.test(city)) return null;
+  const startAt = parsePartifulDateLabel(dateLabel, now);
+  if (!startAt) return null;
+  return {
+    title: cleanPartifulTitle(title),
+    startAt,
+    location: city,
+    description: cleanPartifulDescription(description),
+  };
+}
+
+function cleanPartifulTitle(value) {
+  return String(value ?? "")
+    .replace(/^#+\s*/, "")
+    .replace(/^\d+\s+/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function cleanPartifulDescription(value) {
+  return String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function isLikelyPartifulTitle(title) {
+  if (!title || title.length < 3 || title.length > 160) return false;
+  return !/^(explore|trending|all|music|community|arts?|meet new people!|the weekend is waiting)$/i.test(title);
+}
+
+function partifulLineToRecord(event, sourceUrl, eventUrl) {
+  if (!event?.title || !event.startAt) return null;
+  const source = eventUrl || `${sourceUrl}#${encodeURIComponent(`${event.title}-${event.startAt}`)}`;
+  return {
+    provider: "partiful",
+    providerEventId: extractPartifulEventId(source) || `${event.title}-${event.startAt}`,
+    sourceUrl: source,
+    title: cleanPartifulTitle(event.title),
+    description: event.description || "Public Partiful event listed on the San Francisco explore page.",
+    category: inferCategory(`${event.title} ${event.description}`),
+    tags: ["partiful", ...inferTags(`${event.title} ${event.description}`)],
+    startAt: event.startAt,
+    endAt: null,
+    timezone: "America/Los_Angeles",
+    venueName: "San Francisco",
+    neighborhoodSlug: inferNeighborhoodSlug(`${event.title} ${event.description} ${event.location}`),
+    priceText: inferPriceText(event.description),
+    popularityScore: 60,
+    qualityScore: 64,
+  };
+}
+
+function extractPartifulEventId(sourceUrl) {
+  try {
+    return new URL(sourceUrl).pathname.match(/\/e\/([^/?#]+)/)?.[1] ?? "";
+  } catch {
+    return "";
+  }
+}
+
+function parsePartifulDateLabel(label, now) {
+  const match = String(label ?? "")
+    .trim()
+    .match(/^(Today|Tomorrow|Next\s+([A-Z][a-z]{2})|([A-Z][a-z]{2}),\s+([A-Z][a-z]{2})\s+(\d{1,2})|([A-Z][a-z]{2}))\s+at\s+(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/i);
+  if (!match) return "";
+
+  const [, keyword, nextWeekday, explicitWeekday, monthName, dayOfMonth, bareWeekday, hourText, minuteText = "00", meridiem] = match;
+  let date = new Date(now);
+  date.setHours(0, 0, 0, 0);
+
+  if (/^tomorrow$/i.test(keyword)) date.setDate(date.getDate() + 1);
+  else if (monthName && dayOfMonth) {
+    date = new Date(date.getFullYear(), monthIndex(monthName), Number(dayOfMonth));
+    if (date < startOfDay(now)) date.setFullYear(date.getFullYear() + 1);
+  } else {
+    const weekday = nextWeekday || explicitWeekday || bareWeekday;
+    if (weekday) {
+      const offset = daysUntilWeekday(date, weekday, Boolean(nextWeekday));
+      date.setDate(date.getDate() + offset);
+    }
+  }
+
+  let hour = Number(hourText);
+  const minute = Number(minuteText);
+  if (/pm/i.test(meridiem) && hour !== 12) hour += 12;
+  if (/am/i.test(meridiem) && hour === 12) hour = 0;
+  date.setHours(hour, minute, 0, 0);
+
+  return toPacificDateTime(date);
+}
+
+function startOfDay(value) {
+  const date = new Date(value);
+  date.setHours(0, 0, 0, 0);
+  return date;
+}
+
+function monthIndex(monthName) {
+  return ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"].indexOf(String(monthName).slice(0, 3).toLowerCase());
+}
+
+function daysUntilWeekday(date, weekday, forceNextWeek) {
+  const target = ["sun", "mon", "tue", "wed", "thu", "fri", "sat"].indexOf(String(weekday).slice(0, 3).toLowerCase());
+  if (target === -1) return 0;
+  let offset = (target - date.getDay() + 7) % 7;
+  if (forceNextWeek || offset === 0) offset += 7;
+  return offset;
+}
+
+function toPacificDateTime(date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}T${hour}:${minute}:00-07:00`;
 }
 
 function extractScriptBodies(html) {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { listSourceProviders, parseEmbeddedEventJson, parseIcsFeed, parseJsonLdEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
+import { listSourceProviders, parseEmbeddedEventJson, parseIcsFeed, parseJsonLdEvents, parsePartifulExploreEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
 
 test("parseIcsFeed converts calendar events to ingestion records", () => {
   const records = parseIcsFeed(
@@ -323,4 +323,41 @@ test("parseEmbeddedEventJson avoids substring false-positives like 'Chinatown' -
   assert.equal(records.length, 1);
   assert.equal(records[0].category, "food");
   assert.ok(!records[0].tags.includes("ai"));
+});
+
+test("parsePartifulExploreEvents extracts public San Francisco explore rows", () => {
+  const records = parsePartifulExploreEvents(
+    `<html><body>
+      <a href="/e/c0BvS4L8FcTSiv96xAK8?source=discover">
+        <h4>Date My Friend x ERIA MARINA</h4>
+        <p>Tomorrow at 7pm · San Francisco</p>
+        <p>359 Interested</p>
+      </a>
+      <a href="/e/walk-club?source=discover">
+        <h4>Golden Gate Walk Club</h4>
+        <p>Sun at 10:30am · San Francisco</p>
+        <p>895 Interested</p>
+      </a>
+      <a href="/e/berkeley-makers?source=discover">
+        <h4>Makers Market @ Sticky Art Lab!</h4>
+        <p>Sat, Jul 18 at 4pm · Berkeley</p>
+      </a>
+      <a href="/e/movie-series?source=discover">
+        510 FREE SUMMER MOVIE SERIES @ TILLAGE Fri, Jul 17 at 7pm · San Francisco
+        We're celebrating summer with a free sci-fi themed movie series.
+      </a>
+    </body></html>`,
+    "https://partiful.com/explore/sf",
+    new Date("2026-07-08T12:00:00-07:00"),
+  );
+
+  assert.equal(records.length, 3);
+  assert.equal(records[0].provider, "partiful");
+  assert.equal(records[0].providerEventId, "c0BvS4L8FcTSiv96xAK8");
+  assert.equal(records[0].sourceUrl, "https://partiful.com/e/c0BvS4L8FcTSiv96xAK8?source=discover");
+  assert.equal(records[0].title, "Date My Friend x ERIA MARINA");
+  assert.equal(records[0].startAt, "2026-07-09T19:00:00-07:00");
+  assert.equal(records[1].startAt, "2026-07-12T10:30:00-07:00");
+  assert.equal(records[2].title, "FREE SUMMER MOVIE SERIES @ TILLAGE");
+  assert.equal(records[2].category, "film");
 });

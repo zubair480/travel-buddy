@@ -111,7 +111,7 @@ ENABLE_BRIGHT_DATA_SCRAPING=true
 BRIGHT_DATA_SOURCE_URLS=https://lu.ma/sf,https://www.eventbrite.com/d/ca--san-francisco/events/
 BRIGHT_DATA_MAX_PAGES=12
 ENABLE_SCRAPLING_SCRAPING=true
-SCRAPLING_SOURCE_URLS=https://lu.ma/sf,https://www.eventbrite.com/d/ca--san-francisco/events/
+SCRAPLING_SOURCE_URLS=https://partiful.com/explore/sf,https://lu.ma/sf,https://www.eventbrite.com/d/ca--san-francisco/events/
 SCRAPLING_FETCH_MODE=fetcher
 SCRAPLING_MAX_PAGES=12
 ```
@@ -139,7 +139,7 @@ python3 -m pip install -r requirements-scrapling.txt
 scrapling install
 ```
 
-`SCRAPLING_FETCH_MODE` supports `fetcher`, `dynamic`, or `stealthy`. Start with `fetcher`; use `dynamic` only for public pages that need JavaScript rendering. Keep scraping limited to public pages that permit automated access.
+`SCRAPLING_FETCH_MODE` supports `fetcher`, `dynamic`, or `stealthy`. Start with `fetcher`; use `dynamic` only for public pages that need JavaScript rendering. When `ENABLE_SCRAPLING_SCRAPING=true` and no `SCRAPLING_SOURCE_URLS` is supplied, the backend defaults to Partiful's public San Francisco explore page. Keep scraping limited to public pages that permit automated access.
 
 ### Inspect configured providers
 

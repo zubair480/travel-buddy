@@ -5,6 +5,7 @@ const DEFAULT_PUBLIC_SF_FEED_URLS = [
   "https://www.meetup.com/find/?location=us--ca--San%20Francisco&source=EVENTS",
   "https://lu.ma/sf",
 ];
+const DEFAULT_SCRAPLING_SOURCE_URLS = ["https://partiful.com/explore/sf"];
 
 const DEFAULT_PUBLIC_SCRAPE_EVENT_URLS = [
   "https://partiful.com/discover/san-francisco",
@@ -40,7 +41,7 @@ export function getConfig(rootDir) {
       enableBrightDataScraping: process.env.ENABLE_BRIGHT_DATA_SCRAPING === "true",
       brightDataMaxPages: Number(process.env.BRIGHT_DATA_MAX_PAGES ?? 12),
       enableScraplingScraping: process.env.ENABLE_SCRAPLING_SCRAPING === "true",
-      scraplingSourceUrls: parseListEnv(process.env.SCRAPLING_SOURCE_URLS),
+      scraplingSourceUrls: parseListEnv(process.env.SCRAPLING_SOURCE_URLS, DEFAULT_SCRAPLING_SOURCE_URLS),
       scraplingFetchMode: process.env.SCRAPLING_FETCH_MODE ?? "fetcher",
       scraplingPythonBin: process.env.SCRAPLING_PYTHON_BIN ?? "python3",
       scraplingTimeoutMs: Number(process.env.SCRAPLING_TIMEOUT_MS ?? 60000),
