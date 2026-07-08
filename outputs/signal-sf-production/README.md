@@ -78,6 +78,60 @@ Request shape:
 }
 ```
 
+## Source integrations
+
+The backend can now fetch/import SF events from configured providers through the same normalization path used by manual ingestion.
+
+### Provider strategy
+
+- Eventbrite: token-based API connector via `EVENTBRITE_TOKEN`.
+- Meetup: token-based GraphQL connector via `MEETUP_TOKEN`. Meetup API access may require a Meetup Pro/API-enabled account.
+- Luma: configured public/private calendar feeds via `LUMA_ICS_URLS`.
+- Cerebral Valley: configured calendar feeds via `CEREBRAL_VALLEY_ICS_URLS`.
+- Pie Social: configured calendar feeds via `PIE_SOCIAL_ICS_URLS`.
+- Partiful: no first-party public discovery API is assumed. Import public events by configured JSON-LD event pages only when `ENABLE_PUBLIC_EVENT_SCRAPING=true`.
+- Other SF event sources: configured RSS, ICS, or JSON-LD pages via `SF_EVENT_FEED_URLS`.
+
+Use comma-separated URLs for feed env vars:
+
+```bash
+EVENTBRITE_TOKEN=...
+MEETUP_TOKEN=...
+LUMA_ICS_URLS=https://example.com/luma-calendar.ics
+CEREBRAL_VALLEY_ICS_URLS=https://example.com/cerebral-valley.ics
+PIE_SOCIAL_ICS_URLS=https://example.com/pie-social.ics
+SF_EVENT_FEED_URLS=https://example.com/sf-events.rss,https://example.com/calendar.ics
+ENABLE_PUBLIC_EVENT_SCRAPING=true
+SCRAPE_EVENT_URLS=https://example.com/public-event-page
+```
+
+### Inspect configured providers
+
+```bash
+curl -H "x-admin-token: dev-admin-token" \
+  http://localhost:4180/api/admin/source-providers
+```
+
+### Dry-run source sync
+
+```bash
+curl -X POST http://localhost:4180/api/admin/sync-sources \
+  -H "Content-Type: application/json" \
+  -H "x-admin-token: dev-admin-token" \
+  -d '{"providers":["eventbrite","meetup","luma","sf-feeds"],"dryRun":true}'
+```
+
+### Import source events
+
+```bash
+curl -X POST http://localhost:4180/api/admin/sync-sources \
+  -H "Content-Type: application/json" \
+  -H "x-admin-token: dev-admin-token" \
+  -d '{"providers":["eventbrite","meetup","luma","sf-feeds"]}'
+```
+
+Scraping should stay opt-in and limited to public pages that expose structured `schema.org/Event` JSON-LD. Do not add brittle HTML scraping for platforms that do not permit automated collection.
+
 ## Test
 
 ```bash
