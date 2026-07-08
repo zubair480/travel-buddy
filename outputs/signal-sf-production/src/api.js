@@ -23,6 +23,7 @@ import {
   validateUserPlan,
 } from "./services/app.js";
 import { ingestSourceRecords } from "./services/ingestion.js";
+import { fetchSourceEvents, listSourceProviders } from "./services/sourceIntegrations.js";
 import { listNeighborhoods } from "./repositories/events.js";
 import { findPreferencesByUserId } from "./repositories/preferences.js";
 
@@ -108,6 +109,41 @@ export async function handleApiRequest(context) {
     const body = await parseJsonBody(request);
     const imported = ingestSourceRecords(body.records ?? []);
     sendJson(response, 201, { data: { importedCount: imported.length } });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/admin/source-providers") {
+    const authenticatedUser = getAuthenticatedUser(config, request);
+    const token = request.headers["x-admin-token"];
+    if (authenticatedUser?.role !== "admin" && token !== config.adminIngestToken) {
+      sendJson(response, 403, { error: "Admin privileges required" });
+      return;
+    }
+    sendJson(response, 200, { data: listSourceProviders(config) });
+    return;
+  }
+
+  if (request.method === "POST" && url.pathname === "/api/admin/sync-sources") {
+    const authenticatedUser = getAuthenticatedUser(config, request);
+    const token = request.headers["x-admin-token"];
+    if (authenticatedUser?.role !== "admin" && token !== config.adminIngestToken) {
+      sendJson(response, 403, { error: "Admin privileges required" });
+      return;
+    }
+    const body = await parseJsonBody(request);
+    const sourceEvents = await fetchSourceEvents({
+      config,
+      providers: Array.isArray(body.providers) ? body.providers : [],
+    });
+    const imported = body.dryRun ? [] : ingestSourceRecords(sourceEvents.records);
+    sendJson(response, body.dryRun ? 200 : 201, {
+      data: {
+        dryRun: Boolean(body.dryRun),
+        fetchedCount: sourceEvents.records.length,
+        importedCount: imported.length,
+        providers: sourceEvents.results,
+      },
+    });
     return;
   }
 
