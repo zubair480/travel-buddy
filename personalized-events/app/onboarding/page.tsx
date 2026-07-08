@@ -6,6 +6,7 @@ import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
 import { api } from "@/lib/api";
+import { broadcastProfileRefresh } from "@/lib/uiSignals";
 import type { BudgetLevel, PreferredDay, SocialContext, TimeOfDay, UserPreferences, UserProfile } from "@/lib/types";
 import { useApiResource } from "@/hooks/useApiResource";
 
@@ -466,6 +467,7 @@ export default function OnboardingPage() {
         budgetMinCents: budgetRange.min,
         budgetMaxCents: budgetRange.max,
       });
+      broadcastProfileRefresh();
       setMessage("Profile saved. Your personalized feed is ready.");
       router.push("/discover");
     } catch (caught) {

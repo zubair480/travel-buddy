@@ -157,6 +157,9 @@ export interface BackendPlannerWarning {
   type: "overlap" | "travel" | string;
   message: string;
   eventIds: string[];
+  itemIds?: string[];
+  code?: string;
+  severity?: "info" | "warning" | "error";
 }
 
 export interface BackendHydratedPlan {

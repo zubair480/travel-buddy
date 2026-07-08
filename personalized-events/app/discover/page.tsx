@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
 import { api } from "@/lib/api";
 import { categoryOptions, laneCards, mapBackendCard, neighborhoodOptions } from "@/lib/backend";
 import { ensurePrimaryPlan } from "@/lib/plans";
+import { PREFERENCES_UPDATED_EVENT, PROFILE_UPDATED_EVENT } from "@/lib/uiSignals";
 import type { EventCard as EventCardType, EventFilters } from "@/lib/types";
 
 function toDateInputValue(date: Date) {
@@ -42,29 +43,51 @@ export default function DiscoverPage() {
   const [categories, setCategories] = useState<string[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<Array<{ slug: string; name: string }>>([]);
   const [lanes, setLanes] = useState<ReturnType<typeof laneCards>>([]);
-  const [loading, setLoading] = useState(true);
+  const [isBootstrapLoading, setIsBootstrapLoading] = useState(true);
+  const [isRecommendationsLoading, setIsRecommendationsLoading] = useState(true);
   const [error, setError] = useState("");
   const [pendingSaveId, setPendingSaveId] = useState("");
   const [pendingPlanId, setPendingPlanId] = useState("");
+  const [refreshNonce, setRefreshNonce] = useState(0);
+
+  useEffect(() => {
+    function handleProfileRefresh() {
+      setRefreshNonce((value) => value + 1);
+    }
+
+    function handleStorage(event: StorageEvent) {
+      if (event.key === PROFILE_UPDATED_EVENT || event.key === PREFERENCES_UPDATED_EVENT) {
+        handleProfileRefresh();
+      }
+    }
+
+    window.addEventListener(PROFILE_UPDATED_EVENT, handleProfileRefresh);
+    window.addEventListener(PREFERENCES_UPDATED_EVENT, handleProfileRefresh);
+    window.addEventListener("storage", handleStorage);
+
+    return () => {
+      window.removeEventListener(PROFILE_UPDATED_EVENT, handleProfileRefresh);
+      window.removeEventListener(PREFERENCES_UPDATED_EVENT, handleProfileRefresh);
+      window.removeEventListener("storage", handleStorage);
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
 
     async function loadBootstrap() {
-      setLoading(true);
+      setIsBootstrapLoading(true);
       setError("");
       try {
         const bootstrap = await api.bootstrap();
-        const recommendations = await api.recommendations(filters);
         if (!active) return;
         setCategories(bootstrap.categories);
         setNeighborhoods(bootstrap.neighborhoods);
         setLanes(laneCards(bootstrap.recommendationLanes));
-        setCards(recommendations.map(mapBackendCard));
       } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : "Could not load discovery.");
       } finally {
-        if (active) setLoading(false);
+        if (active) setIsBootstrapLoading(false);
       }
     }
 
@@ -72,13 +95,13 @@ export default function DiscoverPage() {
     return () => {
       active = false;
     };
-  }, []);
+  }, [refreshNonce]);
 
   useEffect(() => {
     let active = true;
 
     async function loadRecommendations() {
-      setLoading(true);
+      setIsRecommendationsLoading(true);
       setError("");
       try {
         const recommendations = await api.recommendations(filters);
@@ -86,7 +109,7 @@ export default function DiscoverPage() {
       } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : "Could not refresh recommendations.");
       } finally {
-        if (active) setLoading(false);
+        if (active) setIsRecommendationsLoading(false);
       }
     }
 
@@ -94,7 +117,7 @@ export default function DiscoverPage() {
     return () => {
       active = false;
     };
-  }, [filters]);
+  }, [filters, refreshNonce]);
 
   const visibleCards = useMemo(() => {
     if (filters.price === "any") return cards;
@@ -164,6 +187,10 @@ export default function DiscoverPage() {
     }
     return meta;
   }, [visibleCards]);
+
+  const isLoading = isBootstrapLoading || isRecommendationsLoading;
+  const showEmptyState = !isLoading && !error && visibleCards.length === 0;
+  const showGrid = visibleCards.length > 0;
 
   async function toggleSaved(eventId: string) {
     const existing = cards.find((event) => event.id === eventId);
@@ -271,6 +298,8 @@ export default function DiscoverPage() {
           </div>
         </section>
 
+        {isLoading && cards.length === 0 ? <LoadingState label="Loading backend recommendations..." /> : null}
+        {isLoading && cards.length > 0 ? <div className="loading inline">Refreshing recommendations from your latest profile...</div> : null}
         <FilterBar
           filters={filters}
           categoryOptions={categoryOptions(categories)}
@@ -325,7 +354,8 @@ export default function DiscoverPage() {
           </section>
         ) : null}
 
-        {error ? (
+        {error && cards.length > 0 ? <div className="error inline">{error}</div> : null}
+        {error && cards.length === 0 ? (
           <ErrorState
             label={error}
             action={
@@ -335,8 +365,7 @@ export default function DiscoverPage() {
             }
           />
         ) : null}
-        {loading ? <LoadingState label="Loading backend recommendations..." /> : null}
-        {!loading && !error && visibleCards.length === 0 ? (
+        {showEmptyState ? (
           <EmptyState
             title="No matches yet"
             body="Loosen a filter or update your onboarding profile to broaden the feed."
@@ -347,7 +376,7 @@ export default function DiscoverPage() {
             }
           />
         ) : null}
-        {!loading && visibleCards.length > 0 ? (
+        {showGrid ? (
           <section className="grid three">
             {visibleCards.map((event) => (
               <EventCard
