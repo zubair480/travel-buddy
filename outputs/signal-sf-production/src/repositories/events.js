@@ -101,6 +101,48 @@ export function listVenuesByIds(ids) {
     }));
 }
 
+export function findVenueByName(name) {
+  const row = getDb().prepare(`SELECT * FROM venues WHERE lower(name) = lower(?)`).get(String(name).trim());
+  return row
+    ? {
+        id: row.id,
+        name: row.name,
+        addressLine1: row.address_line_1,
+        city: row.city,
+        stateCode: row.state_code,
+        postalCode: row.postal_code,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        neighborhoodId: row.neighborhood_id,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }
+    : null;
+}
+
+export function createVenue(input) {
+  const now = new Date().toISOString();
+  getDb()
+    .prepare(`
+      INSERT INTO venues (id, name, address_line_1, city, state_code, postal_code, latitude, longitude, neighborhood_id, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    .run(
+      input.id,
+      input.name,
+      input.addressLine1 ?? null,
+      input.city ?? "San Francisco",
+      input.stateCode ?? "CA",
+      input.postalCode ?? null,
+      input.latitude ?? null,
+      input.longitude ?? null,
+      input.neighborhoodId ?? null,
+      now,
+      now,
+    );
+  return findVenueByName(input.name);
+}
+
 export function upsertEvent(input) {
   const now = new Date().toISOString();
   getDb()

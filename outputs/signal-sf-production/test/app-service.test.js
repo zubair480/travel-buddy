@@ -5,6 +5,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { initializeDatabase } from "../src/db/client.js";
 import { getEventDetail, getRecommendationLanes, getRecommendations } from "../src/services/app.js";
+import { ingestSourceRecords } from "../src/services/ingestion.js";
+import { findVenueByName } from "../src/repositories/events.js";
 import { findUserByEmail } from "../src/repositories/users.js";
 
 const tempRoot = mkdtempSync(path.join(tmpdir(), "signal-sf-tests-"));
@@ -51,4 +53,29 @@ test("getEventDetail returns hydrated related event cards", () => {
   assert.equal(detail.data.event.id, firstRecommendation.event.id);
   assert.ok(Array.isArray(detail.related));
   assert.ok(detail.related.every((entry) => entry.event?.id && entry.recommendation?.score >= 0));
+});
+
+test("ingestSourceRecords creates venues for imported event sources", () => {
+  const imported = ingestSourceRecords([
+    {
+      provider: "luma",
+      providerEventId: "luma-import-venue-test",
+      title: "AI Builders Breakfast",
+      description: "Founder breakfast in Hayes Valley.",
+      category: "tech",
+      tags: ["ai", "founders"],
+      startAt: "2026-07-18T09:00:00-07:00",
+      endAt: "2026-07-18T10:30:00-07:00",
+      venueName: "Hayes Valley Test Loft",
+      addressLine1: "123 Hayes St",
+      neighborhoodSlug: "hayes-valley",
+      sourceUrl: "https://lu.ma/test",
+      priceText: "Free",
+    },
+  ]);
+
+  const venue = findVenueByName("Hayes Valley Test Loft");
+  assert.equal(imported.length, 1);
+  assert.ok(venue);
+  assert.equal(imported[0].venueId, venue.id);
 });

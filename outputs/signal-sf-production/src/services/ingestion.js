@@ -1,7 +1,6 @@
 import { EVENT_CATEGORIES } from "../domain/constants.js";
 import { createId } from "../lib/security.js";
-import { upsertEvent, listNeighborhoods, listVenuesByIds } from "../repositories/events.js";
-import { getDb } from "../db/client.js";
+import { createVenue, findVenueByName, upsertEvent, listNeighborhoods } from "../repositories/events.js";
 
 const categorySet = new Set(EVENT_CATEGORIES);
 
@@ -43,8 +42,25 @@ function findNeighborhoodId(slug) {
 }
 
 function findVenueIdByName(name) {
-  const rows = getDb().prepare(`SELECT id, name FROM venues`).all();
-  return rows.find((row) => row.name.toLowerCase() === String(name).trim().toLowerCase())?.id ?? null;
+  return findVenueByName(name)?.id ?? null;
+}
+
+function ensureVenueId(record, neighborhoodId) {
+  if (record.venueId) return record.venueId;
+  if (!record.venueName) return null;
+  const existingVenueId = findVenueIdByName(record.venueName);
+  if (existingVenueId) return existingVenueId;
+  return createVenue({
+    id: createId("venue"),
+    name: record.venueName,
+    addressLine1: record.addressLine1 ?? record.address ?? null,
+    city: "San Francisco",
+    stateCode: "CA",
+    postalCode: record.postalCode ?? null,
+    latitude: record.latitude ?? null,
+    longitude: record.longitude ?? null,
+    neighborhoodId,
+  })?.id ?? null;
 }
 
 export function ingestSourceRecords(records) {
@@ -53,7 +69,7 @@ export function ingestSourceRecords(records) {
   for (const record of records) {
     const price = parsePriceText(record.priceText);
     const neighborhoodId = findNeighborhoodId(record.neighborhoodSlug);
-    const venueId = record.venueId ?? findVenueIdByName(record.venueName);
+    const venueId = ensureVenueId(record, neighborhoodId);
     const normalized = {
       id: createId("event"),
       sourceProvider: record.provider,
