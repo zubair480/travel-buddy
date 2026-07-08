@@ -1,8 +1,6 @@
 import type { BackendEventCard, BackendHydratedPlan, BackendProfile, BackendPreferences } from "./backend-types";
 import type { EventCard, OneDayPlan, UserPreferences, UserProfile } from "./types";
-
-const fallbackImage =
-  "https://images.unsplash.com/photo-1501594907352-04cda38ebc29?auto=format&fit=crop&w=1200&q=75";
+import { sourceLabel } from "./source";
 
 function dollars(cents?: number | null) {
   return Math.round((cents ?? 0) / 100);
@@ -28,7 +26,7 @@ export function toEventCard(card: BackendEventCard): EventCard {
     id: event.id,
     title: event.title || "Untitled event",
     summary: event.shortDescription || event.description || "Details are still being collected for this event.",
-    imageUrl: event.imageUrl || fallbackImage,
+    imageUrl: event.imageUrl && /^https?:\/\//i.test(event.imageUrl) ? event.imageUrl : undefined,
     startsAt: event.startAt,
     endsAt: event.endAt,
     venueName: venue?.name || "Venue TBA",
@@ -42,6 +40,8 @@ export function toEventCard(card: BackendEventCard): EventCard {
     priceMax: dollars(event.priceMaxCents),
     score: card.recommendation.score ?? 0,
     isSaved: Boolean(card.saved),
+    sourceProvider: event.sourceProvider,
+    sourceLabel: sourceLabel(event.sourceProvider, event.sourceUrl),
     sourceUrl: event.sourceUrl ?? undefined,
     recommendation: {
       label: reasons[0] || "Recommended for your SF context",

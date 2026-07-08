@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Signal SF</title>
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <div class="page-shell">
+      <header class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">San Francisco event finder</p>
+          <h1>Signal SF</h1>
+          <p class="hero-text">
+            Personalized event discovery and a lightweight planner for building a real Saturday, not just a wishlist.
+          </p>
+          <div class="hero-actions">
+            <button id="refreshButton" class="primary-button">Refresh recommendations</button>
+            <button id="createPlanButton" class="secondary-button">Create new plan</button>
+          </div>
+        </div>
+        <aside class="hero-aside">
+          <h2>Your vibe</h2>
+          <form id="preferencesForm" class="preferences-form"></form>
+        </aside>
+      </header>
+
+      <main class="main-grid">
+        <section class="panel panel-large">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Recommended now</p>
+              <h2>Events that fit your SF pattern</h2>
+            </div>
+            <form id="filtersForm" class="filters-inline"></form>
+          </div>
+          <div id="recommendationsMeta" class="panel-meta"></div>
+          <div id="recommendationsGrid" class="event-grid"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Saved</p>
+              <h2>Shortlist</h2>
+            </div>
+          </div>
+          <div id="savedList" class="stack-list"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Planner</p>
+              <h2>Your day plan</h2>
+            </div>
+            <select id="planSelect" class="select-control"></select>
+          </div>
+          <div id="plannerSummary" class="planner-summary"></div>
+          <div id="plannerWarnings" class="warning-list"></div>
+          <div id="plannerItems" class="stack-list"></div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Explore</p>
+              <h2>All SF events in this demo</h2>
+            </div>
+          </div>
+          <div id="exploreGrid" class="event-grid compact-grid"></div>
+        </section>
+
+        <section class="panel panel-wide">
+          <div class="panel-head">
+            <div>
+              <p class="panel-label">Event detail</p>
+              <h2 id="detailTitle">Select an event</h2>
+            </div>
+          </div>
+          <div id="detailView" class="detail-view empty-detail">
+            Choose an event card to inspect its timing, recommendation reasons, and planner fit.
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <template id="eventCardTemplate">
+      <article class="event-card">
+        <div class="event-card-top">
+          <p class="event-kicker"></p>
+          <button class="ghost-button event-save-button" type="button"></button>
+        </div>
+        <h3 class="event-title"></h3>
+        <p class="event-description"></p>
+        <div class="event-meta"></div>
+        <div class="reason-chips"></div>
+        <div class="event-actions">
+          <button class="secondary-button small-button detail-button" type="button">Details</button>
+          <button class="primary-button small-button plan-button" type="button">Add to plan</button>
+        </div>
+      </article>
+    </template>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>

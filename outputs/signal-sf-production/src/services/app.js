@@ -137,14 +137,19 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
     filters.neighborhoodSlugs?.length
       ? neighborhoods.filter((item) => filters.neighborhoodSlugs.includes(item.slug)).map((item) => item.id)
       : [];
-  const events = listEvents({
+  const eventFilters = {
     date: filters.date,
     startDate: filters.startDate,
     endDate: filters.endDate,
     q: filters.q,
     categories: filters.categories,
     neighborhoodIds: filteredNeighborhoodIds,
+  };
+  const liveEvents = listEvents({
+    ...eventFilters,
+    excludeSourceProviders: ["seed"],
   });
+  const events = liveEvents.length ? liveEvents : listEvents(eventFilters);
   const venues = listVenuesByIds([...new Set(events.map((item) => item.venueId).filter(Boolean))]);
   const venueMap = mapById(venues);
 

@@ -1,5 +1,11 @@
 import path from "node:path";
 
+const DEFAULT_PUBLIC_SF_FEED_URLS = [
+  "https://www.eventbrite.com/d/ca--san-francisco/events/",
+  "https://www.meetup.com/find/?location=us--ca--San%20Francisco&source=EVENTS",
+  "https://lu.ma/sf",
+];
+
 export function getConfig(rootDir) {
   const brightDataBrowserWsEndpoint = buildBrightDataBrowserWsEndpoint({
     endpoint: process.env.BRIGHT_DATA_BROWSER_WS_ENDPOINT,
@@ -21,9 +27,9 @@ export function getConfig(rootDir) {
       lumaIcsUrls: parseListEnv(process.env.LUMA_ICS_URLS),
       cerebralValleyIcsUrls: parseListEnv(process.env.CEREBRAL_VALLEY_ICS_URLS),
       pieSocialIcsUrls: parseListEnv(process.env.PIE_SOCIAL_ICS_URLS),
-      sfEventFeedUrls: parseListEnv(process.env.SF_EVENT_FEED_URLS),
+      sfEventFeedUrls: parseListEnv(process.env.SF_EVENT_FEED_URLS, DEFAULT_PUBLIC_SF_FEED_URLS),
       scrapeEventUrls: parseListEnv(process.env.SCRAPE_EVENT_URLS),
-      enablePublicEventScraping: process.env.ENABLE_PUBLIC_EVENT_SCRAPING === "true",
+      enablePublicEventScraping: process.env.ENABLE_PUBLIC_EVENT_SCRAPING ? process.env.ENABLE_PUBLIC_EVENT_SCRAPING === "true" : true,
       brightDataBrowserWsEndpoint,
       brightDataSourceUrls: parseListEnv(process.env.BRIGHT_DATA_SOURCE_URLS),
       enableBrightDataScraping: process.env.ENABLE_BRIGHT_DATA_SCRAPING === "true",
@@ -51,9 +57,10 @@ function buildBrightDataBrowserWsEndpoint({ endpoint, username, password, host }
   return `wss://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${normalizedHost}`;
 }
 
-function parseListEnv(value) {
-  return String(value ?? "")
+function parseListEnv(value, fallback = []) {
+  const parsed = String(value ?? "")
     .split(",")
     .map((item) => item.trim())
     .filter(Boolean);
+  return parsed.length ? parsed : fallback;
 }

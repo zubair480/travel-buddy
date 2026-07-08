@@ -1,20 +1,6 @@
 import type { BackendEventCard, BackendEventDetailResponse, BackendHydratedPlan, BackendLane } from "./backend-types";
 import type { AuthState, EventCard, EventDetail, FilterOption, PlannerCollection } from "./types";
-
-const categoryImages: Record<string, string> = {
-  music: "https://images.unsplash.com/photo-1511192336575-5a79af67a629?auto=format&fit=crop&w=1200&q=75",
-  food: "https://images.unsplash.com/photo-1568213816046-0ee1c42bd559?auto=format&fit=crop&w=1200&q=75",
-  comedy: "https://images.unsplash.com/photo-1527224538127-2104bb71c51b?auto=format&fit=crop&w=1200&q=75",
-  art: "https://images.unsplash.com/photo-1573148195900-7845dcb9b127?auto=format&fit=crop&w=1200&q=75",
-  tech: "https://images.unsplash.com/photo-1516321318423-f06f85e504b3?auto=format&fit=crop&w=1200&q=75",
-  outdoors: "https://images.unsplash.com/photo-1598902108854-10e335adac99?auto=format&fit=crop&w=1200&q=75",
-  nightlife: "https://images.unsplash.com/photo-1505236858219-8359eb29e329?auto=format&fit=crop&w=1200&q=75",
-  family: "https://images.unsplash.com/photo-1511895426328-dc8714191300?auto=format&fit=crop&w=1200&q=75",
-  community: "https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1200&q=75",
-  sports: "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1200&q=75",
-  film: "https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?auto=format&fit=crop&w=1200&q=75",
-  wellness: "https://images.unsplash.com/photo-1506126613408-eca07ce68773?auto=format&fit=crop&w=1200&q=75",
-};
+import { sourceLabel } from "./source";
 
 function titleCase(value: string | null | undefined) {
   return String(value ?? "")
@@ -33,12 +19,18 @@ function formatPrice(min?: number | null, max?: number | null) {
   return formatter.format(((max ?? min) ?? 0) / 100);
 }
 
+function resolveEventImage(imageUrl: string | null | undefined) {
+  if (imageUrl && /^https?:\/\//i.test(imageUrl)) return imageUrl;
+  return undefined;
+}
+
 export function mapBackendCard(card: BackendEventCard): EventCard {
+  const source = sourceLabel(card.event.sourceProvider, card.event.sourceUrl);
   return {
     id: card.event.id,
     title: card.event.title,
     summary: card.event.shortDescription ?? card.event.description ?? "",
-    imageUrl: card.event.imageUrl ?? categoryImages[card.event.category] ?? categoryImages.community,
+    imageUrl: resolveEventImage(card.event.imageUrl),
     startsAt: card.event.startAt,
     endsAt: card.event.endAt ?? card.event.startAt,
     venueName: card.venue?.name ?? "Venue TBA",
@@ -58,6 +50,8 @@ export function mapBackendCard(card: BackendEventCard): EventCard {
     },
     saved: card.saved,
     isSaved: card.saved,
+    sourceProvider: card.event.sourceProvider,
+    sourceLabel: source,
     sourceUrl: card.event.sourceUrl ?? undefined,
   };
 }

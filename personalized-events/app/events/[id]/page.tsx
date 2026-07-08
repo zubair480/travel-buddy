@@ -80,10 +80,10 @@ export default function EventDetailPage() {
 
         {event ? (
           <>
-            <section className="detail-hero" style={{ backgroundImage: `url(${event.imageUrl})` }}>
+            <section className={`detail-hero${event.imageUrl ? "" : " no-image"}`} style={event.imageUrl ? { backgroundImage: `url(${event.imageUrl})` } : undefined}>
               <div className="detail-hero-overlay">
                 <div>
-                  <p className="eyebrow">{event.neighborhood}</p>
+                  <p className="eyebrow">{event.neighborhood} · {event.sourceLabel ?? "Source"}</p>
                   <h1>{event.title}</h1>
                   <p>{formatDateTime(event.startsAt)} at {event.venueName}</p>
                 </div>
@@ -116,6 +116,7 @@ export default function EventDetailPage() {
                   <span>{formatTimeRange(event.startsAt, event.endsAt)}</span>
                   <span>{event.priceLabel}</span>
                   <span>{event.category}</span>
+                  <span>{event.sourceLabel ?? "Source"}</span>
                 </div>
                 <p className="subtle">{event.address}</p>
                 <div className="pill-row">
@@ -133,7 +134,7 @@ export default function EventDetailPage() {
                 </div>
                 {event.sourceUrl ? (
                   <Link className="button secondary" href={event.sourceUrl} target="_blank" rel="noreferrer">
-                    Event source
+                    Open on {event.sourceLabel ?? "source"}
                   </Link>
                 ) : (
                   <p className="subtle">No source URL is available yet.</p>

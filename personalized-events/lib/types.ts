@@ -17,7 +17,7 @@ export interface EventCard {
   id: string;
   title: string;
   summary: string;
-  imageUrl: string;
+  imageUrl?: string;
   startsAt: string;
   endsAt: string;
   venueName: string;
@@ -33,6 +33,8 @@ export interface EventCard {
   recommendation: RecommendationReason;
   saved?: boolean;
   isSaved?: boolean;
+  sourceProvider?: string;
+  sourceLabel?: string;
   sourceUrl?: string;
 }
 

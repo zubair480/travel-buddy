@@ -224,9 +224,9 @@ async function fetchConfiguredFeeds(urls) {
     const text = await fetchText(url);
     if (text.includes("BEGIN:VCALENDAR")) records.push(...parseIcsFeed(text, "sf-feed", url));
     else if (text.includes("<rss") || text.includes("<feed")) records.push(...parseRssFeed(text, "sf-feed", url));
-    else records.push(...parseJsonLdEvents(text, "sf-feed", url));
+    else records.push(...dedupeRecords([...parseJsonLdEvents(text, "sf-feed", url), ...parseEmbeddedEventJson(text, "sf-feed", url)]));
   }
-  return { provider: "sf-feeds", imported: records };
+  return { provider: "sf-feeds", imported: dedupeRecords(records) };
 }
 
 async function fetchPublicJsonLdProvider(provider, sourceConfig) {

@@ -1,0 +1,396 @@
+:root {
+  --bg: #f5efe4;
+  --paper: #fffaf2;
+  --ink: #1e2330;
+  --muted: #6d6a62;
+  --line: rgba(30, 35, 48, 0.1);
+  --brand: #d85f2f;
+  --brand-dark: #9b3f1a;
+  --accent: #1f5c5a;
+  --accent-soft: #dbeceb;
+  --gold: #f2c66d;
+  --shadow: 0 20px 50px rgba(57, 41, 24, 0.12);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Georgia, "Times New Roman", serif;
+  color: var(--ink);
+  background:
+    radial-gradient(circle at top left, rgba(242, 198, 109, 0.35), transparent 24rem),
+    linear-gradient(180deg, #f7f2e8 0%, #f2ebdf 40%, #efe4d2 100%);
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+.page-shell {
+  max-width: 1500px;
+  margin: 0 auto;
+  padding: 32px;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: 1.35fr 0.95fr;
+  gap: 24px;
+  margin-bottom: 28px;
+}
+
+.hero-copy,
+.hero-aside,
+.panel {
+  background: rgba(255, 250, 242, 0.9);
+  border: 1px solid rgba(30, 35, 48, 0.08);
+  box-shadow: var(--shadow);
+  backdrop-filter: blur(8px);
+}
+
+.hero-copy {
+  border-radius: 28px;
+  padding: 40px;
+  min-height: 360px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  background:
+    linear-gradient(135deg, rgba(255, 255, 255, 0.55), transparent 45%),
+    linear-gradient(160deg, rgba(216, 95, 47, 0.12), rgba(31, 92, 90, 0.12)),
+    var(--paper);
+}
+
+.hero-aside {
+  border-radius: 28px;
+  padding: 28px;
+}
+
+.eyebrow,
+.panel-label,
+.event-kicker {
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  font-size: 0.76rem;
+  color: var(--accent);
+  margin: 0 0 10px;
+}
+
+h1 {
+  font-size: clamp(3rem, 6vw, 6rem);
+  line-height: 0.96;
+  margin: 0;
+}
+
+h2 {
+  font-size: 1.6rem;
+  margin: 0;
+}
+
+.hero-text,
+.event-description,
+.detail-copy,
+.planner-summary,
+.panel-meta,
+.warning-item,
+.stack-subtext {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  color: var(--muted);
+}
+
+.hero-text {
+  max-width: 42rem;
+  font-size: 1.12rem;
+  line-height: 1.6;
+  margin: 16px 0 22px;
+}
+
+.hero-actions,
+.event-actions,
+.filters-inline,
+.field-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.main-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 24px;
+}
+
+.panel {
+  border-radius: 24px;
+  padding: 22px;
+}
+
+.panel-large,
+.panel-wide {
+  grid-column: 1 / -1;
+}
+
+.panel-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.panel-meta {
+  margin-bottom: 18px;
+}
+
+.preferences-form,
+.stack-list,
+.warning-list {
+  display: grid;
+  gap: 14px;
+}
+
+.field-group {
+  display: grid;
+  gap: 8px;
+}
+
+.field-label {
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.checkbox-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.checkbox-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: #fff;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+  font-size: 0.92rem;
+}
+
+.checkbox-pill input {
+  accent-color: var(--brand);
+}
+
+.text-input,
+.select-control {
+  width: 100%;
+  border: 1px solid var(--line);
+  background: #fff;
+  border-radius: 14px;
+  padding: 10px 12px;
+}
+
+.event-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.compact-grid {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.event-card,
+.stack-card,
+.warning-item,
+.detail-pane {
+  background: rgba(255, 255, 255, 0.84);
+  border: 1px solid var(--line);
+  border-radius: 20px;
+}
+
+.event-card {
+  padding: 18px;
+  display: grid;
+  gap: 14px;
+}
+
+.event-card-top {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: start;
+}
+
+.event-title {
+  margin: 0;
+  font-size: 1.25rem;
+}
+
+.event-description {
+  margin: 0;
+  min-height: 3.6em;
+  line-height: 1.5;
+}
+
+.event-meta,
+.reason-chips,
+.stack-tags {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.meta-pill,
+.reason-chip,
+.tag-chip {
+  border-radius: 999px;
+  padding: 6px 10px;
+  font-size: 0.82rem;
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.meta-pill {
+  background: rgba(31, 92, 90, 0.08);
+  color: var(--accent);
+}
+
+.reason-chip {
+  background: rgba(216, 95, 47, 0.08);
+  color: var(--brand-dark);
+}
+
+.tag-chip {
+  background: rgba(30, 35, 48, 0.06);
+}
+
+.primary-button,
+.secondary-button,
+.ghost-button {
+  border-radius: 999px;
+  cursor: pointer;
+  transition: transform 140ms ease, background-color 140ms ease, color 140ms ease;
+}
+
+.primary-button {
+  border: none;
+  background: var(--brand);
+  color: white;
+  padding: 11px 16px;
+}
+
+.secondary-button {
+  border: 1px solid var(--line);
+  background: white;
+  color: var(--ink);
+  padding: 10px 15px;
+}
+
+.ghost-button {
+  border: 1px solid rgba(216, 95, 47, 0.2);
+  background: rgba(216, 95, 47, 0.08);
+  color: var(--brand-dark);
+  padding: 8px 12px;
+}
+
+.small-button {
+  padding: 8px 12px;
+  font-size: 0.92rem;
+}
+
+button:hover {
+  transform: translateY(-1px);
+}
+
+.stack-card,
+.warning-item,
+.detail-pane {
+  padding: 16px;
+}
+
+.stack-card-header,
+.detail-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.stack-title {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.stack-subtext {
+  margin: 8px 0 0;
+  line-height: 1.5;
+}
+
+.warning-item.warning {
+  background: rgba(242, 198, 109, 0.18);
+}
+
+.warning-item.error {
+  background: rgba(216, 95, 47, 0.15);
+}
+
+.warning-item.info {
+  background: rgba(31, 92, 90, 0.12);
+}
+
+.detail-view {
+  min-height: 200px;
+}
+
+.empty-detail {
+  display: grid;
+  place-items: center;
+  border: 1px dashed var(--line);
+  border-radius: 20px;
+  color: var(--muted);
+  font-family: "Trebuchet MS", "Segoe UI", sans-serif;
+}
+
+.detail-pane {
+  display: grid;
+  gap: 16px;
+}
+
+.detail-copy {
+  line-height: 1.6;
+  margin: 0;
+}
+
+@media (max-width: 1080px) {
+  .hero,
+  .main-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .page-shell {
+    padding: 16px;
+  }
+
+  .hero-copy,
+  .hero-aside,
+  .panel {
+    border-radius: 20px;
+    padding: 18px;
+  }
+
+  h1 {
+    font-size: 2.7rem;
+  }
+
+  .panel-head {
+    flex-direction: column;
+  }
+}

@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { handleApiRequest } from "./src/api.js";
 import { getConfig } from "./src/config.js";
 import { initializeDatabase } from "./src/db/client.js";
+import { syncConfiguredSourcesAtStartup } from "./src/services/bootstrapSync.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -12,6 +13,7 @@ const publicDir = path.join(__dirname, "public");
 const config = getConfig(__dirname);
 
 await initializeDatabase(config);
+syncConfiguredSourcesAtStartup(config);
 
 const contentTypes = {
   ".html": "text/html; charset=utf-8",

@@ -88,6 +88,14 @@ export function listEvents(filters = {}) {
     conditions.push(`neighborhood_id IN (${filters.neighborhoodIds.map(() => "?").join(", ")})`);
     values.push(...filters.neighborhoodIds);
   }
+  if (filters.excludeSourceProviders?.length) {
+    conditions.push(`source_provider NOT IN (${filters.excludeSourceProviders.map(() => "?").join(", ")})`);
+    values.push(...filters.excludeSourceProviders);
+  }
+  if (!filters.includePast && !filters.date && !filters.startDate && !filters.endDate) {
+    conditions.push(`substr(start_at, 1, 10) >= ?`);
+    values.push(new Date().toISOString().slice(0, 10));
+  }
 
   return getDb()
     .prepare(`
