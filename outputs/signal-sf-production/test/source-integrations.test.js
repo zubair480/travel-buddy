@@ -127,3 +127,106 @@ test("parsers canonicalize luma.com event URLs to lu.ma", () => {
   assert.equal(jsonLdRecords[0].providerEventId, "https://lu.ma/ai-night");
   assert.equal(jsonLdRecords[0].sourceUrl, "https://lu.ma/ai-night");
 });
+
+test("parseEmbeddedEventJson extracts Eventbrite server data assignments", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+      window.__SERVER_DATA__ = {
+        "jsonld": [{
+          "@context": "https://schema.org",
+          "itemListElement": [{
+            "@type": "ListItem",
+            "item": {
+              "@type": "Event",
+              "name": "Pickwick Vintage Show in San Francisco",
+              "startDate": "2026-07-12",
+              "url": "https://www.eventbrite.com/e/pickwick-vintage-show-in-san-francisco-july-2026-tickets-1991848459361",
+              "location": {
+                "name": "San Francisco Ferry Building",
+                "address": {
+                  "addressLocality": "San Francisco",
+                  "streetAddress": "1 Ferry Building"
+                }
+              }
+            }
+          }]
+        }],
+        "buckets": [{
+          "events": [
+            {
+              "eventbrite_event_id": "1991848459361",
+              "name": "Pickwick Vintage Show in San Francisco",
+              "start_date": "2026-07-12",
+              "start_time": "10:00",
+              "end_date": "2026-07-12",
+              "end_time": "16:00",
+              "tickets_url": "https://www.eventbrite.com/checkout-external?eid=1991848459361",
+              "description": {"text": "Vintage clothing and accessories from local vendors."},
+              "primary_venue": {
+                "name": "San Francisco Ferry Building",
+                "address": {
+                  "localized_address_display": "1 Ferry Building, San Francisco, CA 94111"
+                }
+              },
+              "image": {"url": "https://img.evbuc.com/example.jpg"},
+              "tags": [{"display_name": "Fashion"}]
+            },
+            {
+              "eventbrite_event_id": "775219842417",
+              "name": "Boston Career Fair",
+              "start_date": "2026-08-06",
+              "start_time": "09:30",
+              "tickets_url": "https://www.eventbrite.com/e/boston-career-fair-tickets-775219842417",
+              "timezone": "America/New_York",
+              "description": {"text": "Connect live with Boston employers."},
+              "image": {"url": "https://img.evbuc.com/boston.jpg"}
+            }
+          ]
+        }]
+      };
+    </script></html>`,
+    "bright-data",
+    "https://www.eventbrite.com/d/ca--san-francisco/events/",
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].providerEventId, "1991848459361");
+  assert.equal(records[0].title, "Pickwick Vintage Show in San Francisco");
+  assert.equal(records[0].startAt, "2026-07-12T10:00:00-07:00");
+  assert.equal(records[0].endAt, "2026-07-12T16:00:00-07:00");
+  assert.equal(records[0].venueName, "San Francisco Ferry Building");
+  assert.equal(records[0].imageUrl, "https://img.evbuc.com/example.jpg");
+});
+
+test("parseEmbeddedEventJson keeps SF Eventbrite records without explicit city when venue is present", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      window.__SERVER_DATA__ = {
+        "buckets": [{
+          "events": [{
+            "eventbrite_event_id": "1264432213789",
+            "name": "AI Supply Chain Hackathon 2026: Food Banks + AI",
+            "start_date": "2026-07-15",
+            "start_time": "09:00",
+            "tickets_url": "https://www.eventbrite.com/e/ai-supply-chain-hackathon-2026-food-banks-ai-tickets-1264432213789",
+            "timezone": "America/Los_Angeles",
+            "description": {"text": "Join our AI Supply Chain Hackathon."},
+            "primary_venue": {
+              "name": "1417 15th St",
+              "address": {
+                "address_1": "1417 15th St"
+              }
+            }
+          }]
+        }]
+      };
+    </script></html>`,
+    "bright-data",
+    "https://www.eventbrite.com/d/ca--san-francisco/events/",
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].providerEventId, "1264432213789");
+  assert.equal(records[0].venueName, "1417 15th St");
+});

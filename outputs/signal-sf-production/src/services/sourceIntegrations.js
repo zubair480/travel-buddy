@@ -245,30 +245,36 @@ async function fetchBrightDataProvider(sourceConfig) {
   const maxPages = Number.isFinite(sourceConfig.brightDataMaxPages) ? sourceConfig.brightDataMaxPages : 12;
   const urls = sourceConfig.brightDataSourceUrls.slice(0, Math.max(1, maxPages));
   const { chromium } = await loadPlaywright();
-  const browser = await chromium.connectOverCDP(sourceConfig.brightDataBrowserWsEndpoint);
   const imported = [];
   const failures = [];
 
+  for (const url of urls) {
+    try {
+      const html = await fetchBrightDataRenderedHtml(chromium, sourceConfig.brightDataBrowserWsEndpoint, url);
+      const jsonLdRecords = parseJsonLdEvents(html, "bright-data", url);
+      const embeddedRecords = parseEmbeddedEventJson(html, "bright-data", url);
+      imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords]));
+    } catch (error) {
+      failures.push({ url, error: error instanceof Error ? error.message : String(error) });
+    }
+  }
+
+  return { provider: "bright-data", imported: dedupeRecords(imported), failures };
+}
+
+async function fetchBrightDataRenderedHtml(chromium, endpoint, url) {
+  const browser = await chromium.connectOverCDP(endpoint);
   try {
-    for (const url of urls) {
-      const page = await browser.newPage();
-      try {
-        await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
-        const html = await page.content();
-        const jsonLdRecords = parseJsonLdEvents(html, "bright-data", url);
-        const embeddedRecords = parseEmbeddedEventJson(html, "bright-data", url);
-        imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords]));
-      } catch (error) {
-        failures.push({ url, error: error instanceof Error ? error.message : String(error) });
-      } finally {
-        await page.close().catch(() => {});
-      }
+    const page = await browser.newPage();
+    try {
+      await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+      return await page.content();
+    } finally {
+      await page.close().catch(() => {});
     }
   } finally {
     await browser.close().catch(() => {});
   }
-
-  return { provider: "bright-data", imported: dedupeRecords(imported), failures };
 }
 
 async function loadPlaywright() {
@@ -390,12 +396,17 @@ export function parseJsonLdEvents(html, provider, sourceUrl) {
 export function parseEmbeddedEventJson(html, provider, sourceUrl) {
   const records = [];
   for (const raw of extractScriptBodies(html)) {
-    const text = decodeHtmlEntities(stripScriptAssignment(raw));
-    const parsed = safeJsonParse(text);
-    if (!parsed) continue;
-    for (const candidate of findEventLikeObjects(parsed)) {
-      const record = eventLikeObjectToRecord(candidate, provider, sourceUrl);
-      if (record) records.push(record);
+    const jsonTexts = [stripScriptAssignment(raw), ...extractAssignedJsonValues(raw)]
+      .map((text) => decodeHtmlEntities(text))
+      .filter(Boolean);
+
+    for (const text of jsonTexts) {
+      const parsed = safeJsonParse(text);
+      if (!parsed) continue;
+      for (const candidate of findEventLikeObjects(parsed)) {
+        const record = eventLikeObjectToRecord(candidate, provider, sourceUrl);
+        if (record) records.push(record);
+      }
     }
   }
   return dedupeRecords(records);
@@ -414,6 +425,53 @@ function stripScriptAssignment(text) {
   if (nextData) return nextData[1];
   const assignment = trimmed.match(/(?:window\.)?[A-Z0-9_$]+(?:\.[A-Z0-9_$]+)?\s*=\s*({[\s\S]*}|\[[\s\S]*\])\s*;?$/i);
   return assignment?.[1] ?? "";
+}
+
+function extractAssignedJsonValues(text) {
+  const values = [];
+  const assignmentPattern = /window\.[A-Z0-9_$]+(?:\.[A-Z0-9_$]+)?\s*=/gi;
+  for (const match of String(text ?? "").matchAll(assignmentPattern)) {
+    const open = findNextJsonOpen(text, match.index + match[0].length);
+    if (open === -1) continue;
+    const json = readBalancedJson(text, open);
+    if (json) values.push(json);
+  }
+  return values;
+}
+
+function findNextJsonOpen(text, startIndex) {
+  const objectIndex = text.indexOf("{", startIndex);
+  const arrayIndex = text.indexOf("[", startIndex);
+  if (objectIndex === -1) return arrayIndex;
+  if (arrayIndex === -1) return objectIndex;
+  return Math.min(objectIndex, arrayIndex);
+}
+
+function readBalancedJson(text, startIndex) {
+  const stack = [];
+  let inString = false;
+  let escaped = false;
+
+  for (let index = startIndex; index < text.length; index += 1) {
+    const char = text[index];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === "\"") inString = false;
+      continue;
+    }
+
+    if (char === "\"") inString = true;
+    else if (char === "{" || char === "[") stack.push(char);
+    else if (char === "}" || char === "]") {
+      const opener = stack.pop();
+      if ((char === "}" && opener !== "{") || (char === "]" && opener !== "[")) return "";
+      if (stack.length === 0) return text.slice(startIndex, index + 1);
+    }
+  }
+
+  return "";
 }
 
 function safeJsonParse(text) {
@@ -438,42 +496,48 @@ function findEventLikeObjects(value, seen = new Set()) {
 }
 
 function hasEventShape(value) {
-  const title = value.name ?? value.title ?? value.eventName;
-  const startsAt = value.startDate ?? value.startTime ?? value.startsAt ?? value.start_at ?? value.dateTime ?? value.date;
-  const url = value.url ?? value.eventUrl ?? value.canonicalUrl ?? value.href;
+  const title = value.name ?? value.title ?? value.eventName ?? value.summary;
+  const startsAt = value.startDate ?? value.startTime ?? value.startsAt ?? value.start_at ?? value.start_date ?? value.dateTime ?? value.date;
+  const url = value.url ?? value.eventUrl ?? value.canonicalUrl ?? value.href ?? value.tickets_url;
   if (!title || !startsAt) return false;
   if (value["@type"] && !String(value["@type"]).toLowerCase().includes("event")) return false;
-  return Boolean(url || value.location || value.venue || value.description);
+  return Boolean(url || value.location || value.venue || value.primary_venue || value.description || value.eventbrite_event_id);
 }
 
 function eventLikeObjectToRecord(event, provider, sourceUrl) {
-  const title = firstString(event.name, event.title, event.eventName);
-  const startAt = firstString(event.startDate, event.startTime, event.startsAt, event.start_at, event.dateTime, event.date);
+  const title = firstString(readTextValue(event.name), event.title, event.eventName, event.summary);
+  const startAt = readEventStart(event);
   if (!title || !startAt) return null;
 
   const location = Array.isArray(event.location) ? event.location[0] : event.location;
-  const venue = event.venue ?? location;
+  const venue = event.venue ?? event.primary_venue ?? location;
   const address = readAddress(venue);
-  const description = stripHtml(firstString(event.description, event.summary, event.shortDescription) ?? "");
-  const rawUrl = firstString(event.url, event.eventUrl, event.canonicalUrl, event.href);
+  const description = stripHtml(firstString(readTextValue(event.description), event.summary, event.shortDescription, event.full_description) ?? "");
+  const rawUrl = firstString(event.url, event.eventUrl, event.canonicalUrl, event.href, event.tickets_url);
   const source = normalizeEventUrl(rawUrl, sourceUrl);
   const image = event.image ?? event.photo ?? event.coverImage;
   const offers = Array.isArray(event.offers) ? event.offers[0] : event.offers;
+  const timezone = firstString(event.timezone, event.timeZone) || "America/Los_Angeles";
+  const providerEventId = normalizeProviderEventId(provider, firstString(event.id, event._id, event.slug, event.eventbrite_event_id, event.identifier?.value), source);
+
+  if (isEventbriteUrl(source) && !isLikelySanFranciscoEvent({ title, description, venue, address, timezone, source })) {
+    return null;
+  }
 
   return {
     provider,
-    providerEventId: firstString(event.id, event._id, event.slug, event.identifier?.value) || source || `${provider}-${title}-${startAt}`,
+    providerEventId: providerEventId || source || `${provider}-${title}-${startAt}`,
     sourceUrl: source ?? sourceUrl,
     title,
     description,
     category: inferCategory(`${title} ${description}`),
     tags: [provider, ...inferTags(`${title} ${description}`)],
     startAt,
-    endAt: firstString(event.endDate, event.endTime, event.endsAt, event.end_at) || null,
-    timezone: firstString(event.timezone, event.timeZone) || "America/Los_Angeles",
+    endAt: readEventEnd(event) || null,
+    timezone,
     venueName: firstString(venue?.name, venue?.title, address) || `${PROVIDERS[provider]?.label ?? "SF"} venue TBA`,
     neighborhoodSlug: inferNeighborhoodSlug(`${venue?.name ?? ""} ${address ?? ""} ${description}`),
-    imageUrl: Array.isArray(image) ? firstString(image[0]?.url, image[0]) : firstString(image?.url, image),
+    imageUrl: Array.isArray(image) ? firstString(image[0]?.url, image[0]) : firstString(image?.url, image?.image_sizes?.large, image),
     priceText: readPriceText(offers, description),
     popularityScore: 60,
     qualityScore: 66,
@@ -483,7 +547,17 @@ function eventLikeObjectToRecord(event, provider, sourceUrl) {
 function readAddress(value) {
   if (!value) return "";
   if (typeof value.address === "string") return value.address;
-  return [value.address?.streetAddress, value.address?.addressLocality, value.address?.addressRegion].filter(Boolean).join(", ");
+  return [
+    value.address?.streetAddress,
+    value.address?.address_1,
+    value.address?.localized_address_display,
+    value.address?.addressLocality,
+    value.address?.city,
+    value.address?.addressRegion,
+    value.address?.region,
+  ]
+    .filter(Boolean)
+    .join(", ");
 }
 
 function readPriceText(offers, fallbackText) {
@@ -504,6 +578,30 @@ function normalizeEventUrl(value, sourceUrl) {
   }
 }
 
+function readEventStart(event) {
+  const explicit = firstString(event.startDate, event.startTime, event.startsAt, event.start_at, event.dateTime, event.date);
+  if (explicit) return explicit;
+  return combineDateAndTime(event.start_date, event.start_time);
+}
+
+function readEventEnd(event) {
+  const explicit = firstString(event.endDate, event.endTime, event.endsAt, event.end_at);
+  if (explicit) return explicit;
+  return combineDateAndTime(event.end_date, event.end_time);
+}
+
+function combineDateAndTime(date, time) {
+  if (!date) return "";
+  if (!time) return `${date}T00:00:00-07:00`;
+  return `${date}T${String(time).length === 5 ? `${time}:00` : time}-07:00`;
+}
+
+function readTextValue(value) {
+  if (typeof value === "string") return value;
+  if (value && typeof value === "object") return value.text ?? value.localized ?? value.display_name ?? "";
+  return "";
+}
+
 function firstString(...values) {
   for (const value of values) {
     if (typeof value === "string" && value.trim()) return value.trim();
@@ -513,13 +611,70 @@ function firstString(...values) {
 }
 
 function dedupeRecords(records) {
-  const seen = new Set();
-  return records.filter((record) => {
+  const byKey = new Map();
+  for (const record of records) {
     const key = `${record.provider}:${record.providerEventId || record.sourceUrl || record.title}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
+    const existing = byKey.get(key);
+    if (!existing || recordCompletenessScore(record) > recordCompletenessScore(existing)) {
+      byKey.set(key, record);
+    }
+  }
+  return Array.from(byKey.values());
+}
+
+function recordCompletenessScore(record) {
+  return [
+    record.description,
+    record.imageUrl,
+    record.venueName && !String(record.venueName).includes("venue TBA") ? record.venueName : "",
+    String(record.startAt ?? "").includes("T") ? record.startAt : "",
+    String(record.endAt ?? "").includes("T") ? record.endAt : "",
+    record.priceText,
+  ].filter(Boolean).length;
+}
+
+function normalizeProviderEventId(provider, explicitId, sourceUrl) {
+  if (provider === "bright-data" && isEventbriteUrl(sourceUrl)) {
+    return extractEventbriteId(sourceUrl) || explicitId || sourceUrl;
+  }
+  return explicitId || sourceUrl || "";
+}
+
+function extractEventbriteId(sourceUrl) {
+  if (!sourceUrl) return "";
+  const value = String(sourceUrl);
+  return value.match(/tickets-(\d+)/)?.[1] ?? value.match(/[?&]eid=(\d+)/)?.[1] ?? "";
+}
+
+function isEventbriteUrl(sourceUrl) {
+  if (!sourceUrl) return false;
+  try {
+    const hostname = new URL(sourceUrl).hostname;
+    return hostname === "www.eventbrite.com" || hostname === "eventbrite.com";
+  } catch {
+    return false;
+  }
+}
+
+function isLikelySanFranciscoEvent({ title, description, venue, address, timezone, source }) {
+  const text = [
+    title,
+    description,
+    venue?.name,
+    venue?.address?.localized_address_display,
+    venue?.address?.localized_area_display,
+    venue?.address?.city,
+    venue?.address?.addressLocality,
+    address,
+  ]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+
+  if (text.includes("san francisco") || /\bsf\b/.test(text)) return true;
+  if (timezone && timezone !== "America/Los_Angeles") return false;
+  if (!source || !isEventbriteUrl(source)) return false;
+  return Boolean(venue?.name || address);
 }
 
 function flattenJsonLd(value) {
@@ -534,17 +689,23 @@ function jsonLdEventToRecord(event, provider, sourceUrl) {
   const address = typeof location?.address === "string" ? location.address : [location?.address?.streetAddress, location?.address?.addressLocality].filter(Boolean).join(", ");
   const offers = Array.isArray(event.offers) ? event.offers[0] : event.offers;
   const source = normalizeEventUrl(event.url, sourceUrl);
+  const description = stripHtml(event.description ?? "");
+  const timezone = firstString(event.timezone, event.timeZone) || "America/Los_Angeles";
+  if (isEventbriteUrl(source) && !isLikelySanFranciscoEvent({ title: event.name, description, venue: location, address, timezone, source })) {
+    return null;
+  }
+
   return {
     provider,
-    providerEventId: event.identifier?.value ?? source ?? `${provider}-${event.name}-${event.startDate}`,
+    providerEventId: normalizeProviderEventId(provider, event.identifier?.value, source) ?? source ?? `${provider}-${event.name}-${event.startDate}`,
     sourceUrl: source ?? sourceUrl,
     title: event.name,
-    description: stripHtml(event.description ?? ""),
+    description,
     category: inferCategory(`${event.name} ${event.description ?? ""}`),
     tags: [provider, ...inferTags(`${event.name} ${event.description ?? ""}`)],
     startAt: event.startDate,
     endAt: event.endDate ?? null,
-    timezone: firstString(event.timezone, event.timeZone) || "America/Los_Angeles",
+    timezone,
     venueName: location?.name ?? address ?? `${PROVIDERS[provider]?.label ?? "SF"} venue TBA`,
     neighborhoodSlug: inferNeighborhoodSlug(`${location?.name ?? ""} ${address}`),
     imageUrl: Array.isArray(event.image) ? event.image[0] : event.image,
