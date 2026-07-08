@@ -1,0 +1,13 @@
+<svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="512" height="512" rx="112" fill="#F8F5EF"/>
+  <circle cx="256" cy="198" r="118" fill="#0F766E"/>
+  <path d="M144 320C175 279 211 257 256 257C301 257 337 279 368 320V368H144V320Z" fill="#111827"/>
+  <path d="M181 327C198 305 220 294 256 294C292 294 314 305 331 327V368H181V327Z" fill="#F8F5EF"/>
+  <rect x="214" y="120" width="84" height="72" rx="20" fill="#F8F5EF"/>
+  <rect x="228" y="138" width="56" height="10" rx="5" fill="#0F766E"/>
+  <rect x="228" y="158" width="40" height="10" rx="5" fill="#0F766E"/>
+  <path d="M220 196H292V222C292 241 276 257 256 257C236 257 220 241 220 222V196Z" fill="#111827"/>
+  <path d="M188 368H324C332.837 368 340 375.163 340 384V392H172V384C172 375.163 179.163 368 188 368Z" fill="#0F766E"/>
+  <path d="M160 412H352" stroke="#111827" stroke-width="20" stroke-linecap="round"/>
+  <text x="256" y="458" text-anchor="middle" fill="#111827" font-family="Arial, Helvetica, sans-serif" font-size="52" font-weight="700" letter-spacing="1">SF</text>
+</svg>
