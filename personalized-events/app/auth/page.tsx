@@ -40,8 +40,8 @@ export default function AuthPage() {
     <AppShell>
       <section className="auth-layout">
         <div>
-          <p className="eyebrow">Signal SF account</p>
-          <h1>Keep your event graph synced.</h1>
+          <p className="eyebrow">SF Buddy account</p>
+          <h1>Keep your city plan synced.</h1>
           <p className="lead">
             Your goals, saved events, and itinerary now live in the backend session instead of browser storage.
           </p>

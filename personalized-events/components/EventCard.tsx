@@ -13,7 +13,9 @@ interface EventCardProps {
   isAddingToPlan?: boolean;
 }
 
-export function EventCard({ event, isSaved = event.isSaved, onSaveToggle, onAddToPlan, isSaving, isAddingToPlan }: EventCardProps) {
+export function EventCard({ event, isSaved, onSaveToggle, onAddToPlan, isSaving, isAddingToPlan }: EventCardProps) {
+  const resolvedSaved = isSaved ?? event.saved ?? event.isSaved ?? false;
+
   return (
     <article className="card editorial-card">
       <Link href={`/events/${event.id}`} aria-label={`Open ${event.title}`}>
@@ -35,7 +37,7 @@ export function EventCard({ event, isSaved = event.isSaved, onSaveToggle, onAddT
         <div className="why">{event.recommendation.label}</div>
         <div className="actions">
           <button className="button secondary" type="button" onClick={() => onSaveToggle?.(event.id)} disabled={!onSaveToggle || isSaving}>
-            {isSaving ? "Saving..." : isSaved ? "Saved" : "Save"}
+            {isSaving ? "Saving..." : resolvedSaved ? "Saved" : "Save"}
           </button>
           <button className="button" type="button" onClick={() => onAddToPlan?.(event.id)} disabled={!onAddToPlan || isAddingToPlan}>
             {isAddingToPlan ? "Adding..." : "Add to plan"}

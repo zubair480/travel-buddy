@@ -6,11 +6,10 @@ import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
 import { RequireAuth } from "@/components/RequireAuth";
 import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
+import { useApiResource } from "@/hooks/useApiResource";
 import { api } from "@/lib/api";
 import { toEventCard, toPlan } from "@/lib/adapters";
-import type { BootstrapPayload } from "@/lib/backend-types";
 import type { EventCard as EventCardType, OneDayPlan } from "@/lib/types";
-import { useApiResource } from "@/hooks/useApiResource";
 
 async function ensurePlan(plans: OneDayPlan[], setPlans: (plans: OneDayPlan[]) => void) {
   if (plans[0]) return plans[0];
@@ -23,19 +22,19 @@ async function ensurePlan(plans: OneDayPlan[], setPlans: (plans: OneDayPlan[]) =
 }
 
 export default function SavedPage() {
-  const { data, error, isLoading, setData, refresh } = useApiResource<BootstrapPayload>(() => api.bootstrap(), []);
+  const { data, error, isLoading, setData, refresh } = useApiResource(() => api.savedEvents(), []);
   const [plans, setPlans] = useState<OneDayPlan[]>([]);
   const [actionError, setActionError] = useState("");
   const [pendingId, setPendingId] = useState("");
 
-  const savedEvents: EventCardType[] = data?.saved.map(toEventCard) ?? [];
+  const savedEvents: EventCardType[] = (data ?? []).map(toEventCard);
 
   const removeSaved = async (id: string) => {
-    if (!data) return;
-    const previous = data;
+    const previous = data ?? [];
     setPendingId(id);
     setActionError("");
-    setData({ ...data, saved: data.saved.filter((card) => card.event.id !== id) });
+    setData(previous.filter((card) => card.event.id !== id));
+
     try {
       await api.unsaveEvent(id);
     } catch (caught) {
@@ -69,7 +68,7 @@ export default function SavedPage() {
           <div>
             <p className="eyebrow">Bookmarks</p>
             <h1>Saved events</h1>
-            <p className="lead">A backend-synced shortlist before you commit to a one-day plan.</p>
+            <p className="lead">A backend-synced shortlist before you commit to the final day plan.</p>
           </div>
           <Link className="button" href="/planner">
             Open planner
@@ -82,14 +81,22 @@ export default function SavedPage() {
         {!isLoading && !error && savedEvents.length === 0 ? (
           <EmptyState
             title="No saved events"
-            body="Save a few backend recommendations from Discover, then return here to build a plan."
+            body="Save a few recommendations from Discover, then come back here to shape the day."
             action={<Link className="button secondary" href="/discover">Find events</Link>}
           />
         ) : null}
         {!isLoading && savedEvents.length > 0 ? (
           <section className="grid three">
             {savedEvents.map((event) => (
-              <EventCard key={event.id} event={event} isSaved onSaveToggle={removeSaved} onAddToPlan={addToPlan} isSaving={pendingId === event.id} isAddingToPlan={pendingId === event.id} />
+              <EventCard
+                key={event.id}
+                event={event}
+                isSaved
+                onSaveToggle={removeSaved}
+                onAddToPlan={addToPlan}
+                isSaving={pendingId === event.id}
+                isAddingToPlan={pendingId === event.id}
+              />
             ))}
           </section>
         ) : null}

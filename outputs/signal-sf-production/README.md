@@ -9,6 +9,8 @@ Signal SF Production is a production-style San Francisco events finder and plann
 - profile-first onboarding with goals, stage, roles, skills, networking intent, and CV summary
 - repository and service layers
 - admin ingestion endpoint
+- paginated recommendation APIs with frontend-friendly `meta`
+- goal-based recommendation lanes for frontend surfaces
 - seeded production database
 - built-in test coverage for core ranking and planner logic
 - cleaner environment-driven configuration
@@ -82,4 +84,26 @@ Request shape:
 
 ```bash
 node --test
+```
+
+## Frontend integration helpers
+
+Useful endpoints for frontend integration:
+
+- `GET /api/me/recommendations?page=1&pageSize=12`
+- `GET /api/events?page=1&pageSize=12`
+- `GET /api/me/recommendation-lanes`
+
+Feed endpoints now return:
+
+```json
+{
+  "data": [],
+  "meta": {
+    "page": 1,
+    "pageSize": 12,
+    "total": 42,
+    "hasMore": true
+  }
+}
 ```

@@ -1,154 +1,158 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useEffect, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
 import { FilterBar } from "@/components/FilterBar";
 import { RequireAuth } from "@/components/RequireAuth";
 import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
 import { api } from "@/lib/api";
-import { toEventCard, toPlan } from "@/lib/adapters";
-import type { BootstrapPayload } from "@/lib/backend-types";
-import type { EventCard as EventCardType, EventFilters, OneDayPlan } from "@/lib/types";
+import { categoryOptions, laneCards, mapBackendCard, neighborhoodOptions } from "@/lib/backend";
+import { ensurePrimaryPlan } from "@/lib/plans";
+import type { EventCard as EventCardType, EventFilters } from "@/lib/types";
 
 const initialFilters: EventFilters = {
   q: "",
-  date: "any",
+  date: "",
   category: "any",
   price: "any",
   neighborhood: "any",
   sort: "recommended",
 };
 
-function priceMatches(event: EventCardType, price: EventFilters["price"]) {
-  if (price === "any") return true;
-  if (price === "free") return event.priceMin === 0;
-  if (price === "under25") return event.priceMin <= 25;
-  if (price === "under75") return event.priceMin <= 75;
-  return true;
-}
-
-function weekendMatches(event: EventCardType, date: EventFilters["date"]) {
-  if (date !== "weekend") return true;
-  const day = new Date(event.startsAt).getDay();
-  return day === 0 || day === 6;
-}
-
-async function ensurePlan(plans: OneDayPlan[], setPlans: (plans: OneDayPlan[]) => void) {
-  if (plans[0]) return plans[0];
-  const nextSaturday = new Date();
-  nextSaturday.setDate(nextSaturday.getDate() + ((6 - nextSaturday.getDay() + 7) % 7 || 7));
-  await api.createPlan({
-    title: "SF day plan",
-    planDate: nextSaturday.toISOString().slice(0, 10),
-    notes: "Created from Discover.",
-  });
-  const hydrated = (await api.plans()).map(toPlan);
-  setPlans(hydrated);
-  return hydrated[0];
-}
-
 export default function DiscoverPage() {
-  const [bootstrap, setBootstrap] = useState<BootstrapPayload | null>(null);
-  const [events, setEvents] = useState<EventCardType[]>([]);
-  const [plans, setPlans] = useState<OneDayPlan[]>([]);
   const [filters, setFilters] = useState<EventFilters>(initialFilters);
+  const [cards, setCards] = useState<EventCardType[]>([]);
+  const [categories, setCategories] = useState<string[]>([]);
+  const [neighborhoods, setNeighborhoods] = useState<Array<{ slug: string; name: string }>>([]);
+  const [lanes, setLanes] = useState<ReturnType<typeof laneCards>>([]);
+  const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [isLoading, setIsLoading] = useState(true);
   const [pendingSaveId, setPendingSaveId] = useState("");
   const [pendingPlanId, setPendingPlanId] = useState("");
 
   useEffect(() => {
-    let ignore = false;
-    async function load() {
-      setIsLoading(true);
+    let active = true;
+
+    async function loadBootstrap() {
+      setLoading(true);
       setError("");
       try {
-        const payload = await api.bootstrap();
-        const hydratedPlans = (await api.plans()).map(toPlan);
-        if (!ignore) {
-          setBootstrap(payload);
-          setPlans(hydratedPlans);
-          setEvents(payload.recommendations.map(toEventCard));
-        }
+        const bootstrap = await api.bootstrap();
+        const recommendations = await api.recommendations(filters);
+        if (!active) return;
+        setCategories(bootstrap.categories);
+        setNeighborhoods(bootstrap.neighborhoods);
+        setLanes(laneCards(bootstrap.recommendationLanes));
+        setCards(recommendations.map(mapBackendCard));
       } catch (caught) {
-        if (!ignore) setError(caught instanceof Error ? caught.message : "Could not load discovery.");
+        if (active) setError(caught instanceof Error ? caught.message : "Could not load discovery.");
       } finally {
-        if (!ignore) setIsLoading(false);
+        if (active) setLoading(false);
       }
     }
-    load();
+
+    void loadBootstrap();
     return () => {
-      ignore = true;
+      active = false;
     };
   }, []);
 
   useEffect(() => {
-    if (!bootstrap) return;
-    let ignore = false;
+    let active = true;
+
     async function loadRecommendations() {
-      setIsLoading(true);
+      setLoading(true);
       setError("");
       try {
-        const cards = await api.recommendations(filters);
-        if (!ignore) setEvents(cards.map(toEventCard));
+        const recommendations = await api.recommendations(filters);
+        if (active) setCards(recommendations.map(mapBackendCard));
       } catch (caught) {
-        if (!ignore) setError(caught instanceof Error ? caught.message : "Could not refresh recommendations.");
+        if (active) setError(caught instanceof Error ? caught.message : "Could not refresh recommendations.");
       } finally {
-        if (!ignore) setIsLoading(false);
+        if (active) setLoading(false);
       }
     }
-    loadRecommendations();
+
+    void loadRecommendations();
     return () => {
-      ignore = true;
+      active = false;
     };
-  }, [filters, bootstrap]);
+  }, [filters]);
 
-  const visibleEvents = useMemo(
-    () => events.filter((event) => priceMatches(event, filters.price)).filter((event) => weekendMatches(event, filters.date)),
-    [events, filters.price, filters.date],
-  );
+  const visibleCards = useMemo(() => {
+    if (filters.price === "any") return cards;
+    return cards.filter((event) => {
+      if (filters.price === "free") return event.priceMin === 0;
+      if (filters.price === "under25") return event.priceMin <= 25;
+      if (filters.price === "under75") return event.priceMin <= 75;
+      return true;
+    });
+  }, [cards, filters.price]);
 
-  const lanes = useMemo(
-    () => [
-      { label: "Best fits", count: visibleEvents.filter((event) => event.score >= 3).length },
-      { label: "Saved", count: visibleEvents.filter((event) => event.isSaved).length },
-      { label: "Tech-adjacent", count: visibleEvents.filter((event) => `${event.title} ${event.tags.join(" ")}`.toLowerCase().includes("tech")).length },
-    ],
-    [visibleEvents],
-  );
+  async function toggleSaved(eventId: string) {
+    const existing = cards.find((event) => event.id === eventId);
+    if (!existing) return;
 
-  const toggleSaved = async (id: string) => {
-    const event = events.find((item) => item.id === id);
-    if (!event) return;
-    setPendingSaveId(id);
-    setEvents((current) => current.map((item) => (item.id === id ? { ...item, isSaved: !item.isSaved } : item)));
+    setPendingSaveId(eventId);
+    setError("");
+    setCards((current) =>
+      current.map((event) =>
+        event.id === eventId
+          ? {
+              ...event,
+              saved: !(event.saved ?? event.isSaved ?? false),
+              isSaved: !(event.saved ?? event.isSaved ?? false),
+            }
+          : event,
+      ),
+    );
+
     try {
-      if (event.isSaved) await api.unsaveEvent(id);
-      else await api.saveEvent(id);
+      if (existing.saved ?? existing.isSaved) await api.unsaveEvent(eventId);
+      else await api.saveEvent(eventId);
     } catch (caught) {
-      setEvents((current) => current.map((item) => (item.id === id ? { ...item, isSaved: event.isSaved } : item)));
+      setCards((current) =>
+        current.map((event) =>
+          event.id === eventId
+            ? {
+                ...event,
+                saved: existing.saved ?? existing.isSaved ?? false,
+                isSaved: existing.saved ?? existing.isSaved ?? false,
+              }
+            : event,
+        ),
+      );
       setError(caught instanceof Error ? caught.message : "Could not update saved state.");
     } finally {
       setPendingSaveId("");
     }
-  };
+  }
 
-  const addToPlan = async (id: string) => {
-    setPendingPlanId(id);
+  async function addToPlan(eventId: string) {
+    setPendingPlanId(eventId);
     setError("");
     try {
-      const plan = await ensurePlan(plans, setPlans);
-      const nextPlan = toPlan(await api.addPlanItem(plan.id, id));
-      setPlans((current) => [nextPlan, ...current.filter((item) => item.id !== nextPlan.id)]);
-      setEvents((current) => current.map((item) => (item.id === id ? { ...item, isSaved: true } : item)));
+      const planId = await ensurePrimaryPlan();
+      await api.addPlanItem(planId, eventId);
+      setCards((current) =>
+        current.map((event) =>
+          event.id === eventId
+            ? {
+                ...event,
+                saved: true,
+                isSaved: true,
+              }
+            : event,
+        ),
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not add event to your plan.");
     } finally {
       setPendingPlanId("");
     }
-  };
+  }
 
   return (
     <AppShell>
@@ -156,35 +160,59 @@ export default function DiscoverPage() {
         <section>
           <p className="eyebrow">Personalized discovery</p>
           <h1>What should I do in SF this week?</h1>
-          <p className="lead">A backend-ranked feed that turns your goals, profile, and preferences into practical event options.</p>
+          <p className="lead">Backend-ranked recommendations tuned to your goals, neighborhoods, budget, and time window.</p>
         </section>
 
-        {bootstrap ? <FilterBar filters={filters} onChange={setFilters} categories={bootstrap.categories} neighborhoods={bootstrap.neighborhoods} /> : null}
+        <FilterBar
+          filters={filters}
+          categoryOptions={categoryOptions(categories)}
+          neighborhoodOptions={neighborhoodOptions(neighborhoods)}
+          onChange={setFilters}
+        />
 
-        <section className="lane-row" aria-label="Recommendation lanes">
-          {lanes.map((lane) => (
-            <div className="lane" key={lane.label}>
-              <strong>{lane.count}</strong>
-              <span>{lane.label}</span>
-            </div>
-          ))}
-        </section>
+        {lanes.length > 0 ? (
+          <section className="lane-row" aria-label="Recommendation lanes">
+            {lanes.slice(0, 3).map((lane) => (
+              <div className="lane" key={lane.key}>
+                <div>
+                  <h3>{lane.title}</h3>
+                  <p className="subtle">{lane.description}</p>
+                </div>
+                <strong>{lane.items.length}</strong>
+              </div>
+            ))}
+          </section>
+        ) : null}
 
-        {error ? <ErrorState label={error} action={<button className="button secondary" onClick={() => setFilters({ ...filters })}>Retry</button>} /> : null}
-        {isLoading ? <LoadingState label="Loading backend recommendations..." /> : null}
-        {!isLoading && !error && visibleEvents.length === 0 ? (
-          <EmptyState
-            title="No matches yet"
-            body="Loosen one filter or update your profile to broaden the feed."
-            action={<Link className="button secondary" href="/onboarding">Update profile</Link>}
+        {error ? (
+          <ErrorState
+            label={error}
+            action={
+              <Link className="button secondary" href="/onboarding">
+                Update profile
+              </Link>
+            }
           />
         ) : null}
-        {!isLoading && visibleEvents.length > 0 ? (
+        {loading ? <LoadingState label="Loading backend recommendations..." /> : null}
+        {!loading && !error && visibleCards.length === 0 ? (
+          <EmptyState
+            title="No matches yet"
+            body="Loosen a filter or update your onboarding profile to broaden the feed."
+            action={
+              <Link className="button secondary" href="/onboarding">
+                Update profile
+              </Link>
+            }
+          />
+        ) : null}
+        {!loading && visibleCards.length > 0 ? (
           <section className="grid three">
-            {visibleEvents.map((event) => (
+            {visibleCards.map((event) => (
               <EventCard
                 key={event.id}
                 event={event}
+                isSaved={event.saved ?? event.isSaved}
                 onSaveToggle={toggleSaved}
                 onAddToPlan={addToPlan}
                 isSaving={pendingSaveId === event.id}

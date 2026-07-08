@@ -7,24 +7,16 @@ import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
 import { RequireAuth } from "@/components/RequireAuth";
 import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
-import { api } from "@/lib/api";
-import { toEventCard, toPlan } from "@/lib/adapters";
-import type { BackendEventCard } from "@/lib/backend-types";
-import type { EventCard as EventCardType, OneDayPlan } from "@/lib/types";
-import { formatDateTime, formatTimeRange } from "@/lib/format";
 import { useApiResource } from "@/hooks/useApiResource";
+import { api } from "@/lib/api";
+import { toEventCard } from "@/lib/adapters";
+import { formatDateTime, formatTimeRange } from "@/lib/format";
+import { ensurePrimaryPlan } from "@/lib/plans";
+import type { BackendEventCard } from "@/lib/backend-types";
+import type { EventCard as EventCardType } from "@/lib/types";
 
 function isBackendEventCard(value: unknown): value is BackendEventCard {
   return Boolean(value && typeof value === "object" && "event" in value && "recommendation" in value);
-}
-
-async function ensurePlan() {
-  const plans = (await api.plans()).map(toPlan);
-  if (plans[0]) return plans[0];
-  const date = new Date();
-  date.setDate(date.getDate() + 1);
-  await api.createPlan({ title: "Event detail plan", planDate: date.toISOString().slice(0, 10), notes: "Created from an event detail page." });
-  return (await api.plans()).map(toPlan)[0];
 }
 
 export default function EventDetailPage() {
@@ -48,15 +40,15 @@ export default function EventDetailPage() {
 
   const toggleSaved = async () => {
     if (!event) return;
-    const wasSaved = event.isSaved;
+    const wasSaved = event.isSaved ?? event.saved ?? false;
     setIsSaving(true);
     setActionError("");
-    setEvent({ ...event, isSaved: !wasSaved });
+    setEvent({ ...event, isSaved: !wasSaved, saved: !wasSaved });
     try {
       if (wasSaved) await api.unsaveEvent(event.id);
       else await api.saveEvent(event.id);
     } catch (caught) {
-      setEvent({ ...event, isSaved: wasSaved });
+      setEvent({ ...event, isSaved: wasSaved, saved: wasSaved });
       setActionError(caught instanceof Error ? caught.message : "Could not update saved state.");
     } finally {
       setIsSaving(false);
@@ -68,9 +60,9 @@ export default function EventDetailPage() {
     setIsAdding(true);
     setActionError("");
     try {
-      const plan: OneDayPlan = await ensurePlan();
-      await api.addPlanItem(plan.id, event.id);
-      setEvent({ ...event, isSaved: true });
+      const planId = await ensurePrimaryPlan();
+      await api.addPlanItem(planId, event.id);
+      setEvent({ ...event, isSaved: true, saved: true });
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "Could not add this event to your plan.");
     } finally {
@@ -110,11 +102,11 @@ export default function EventDetailPage() {
                   {related.length ? (
                     <div className="grid two">
                       {related.map((relatedEvent) => (
-                        <EventCard key={relatedEvent.id} event={relatedEvent} />
+                        <EventCard key={relatedEvent.id} event={relatedEvent} isSaved={relatedEvent.saved ?? relatedEvent.isSaved} />
                       ))}
                     </div>
                   ) : (
-                    <EmptyState title="Related events pending" body="The backend detail endpoint needs to return full related event cards before this lane can render reliably." />
+                    <EmptyState title="No related events yet" body="The backend could not find any strong related matches for this event." />
                   )}
                 </div>
               </div>
@@ -132,10 +124,10 @@ export default function EventDetailPage() {
                   ))}
                 </div>
                 <div className="actions">
-                  <button className="button secondary" type="button" onClick={toggleSaved} disabled={isSaving}>
-                    {isSaving ? "Saving..." : event.isSaved ? "Saved" : "Save"}
+                  <button className="button secondary" type="button" onClick={() => void toggleSaved()} disabled={isSaving}>
+                    {isSaving ? "Saving..." : event.isSaved || event.saved ? "Saved" : "Save"}
                   </button>
-                  <button className="button" type="button" onClick={addToPlan} disabled={isAdding}>
+                  <button className="button" type="button" onClick={() => void addToPlan()} disabled={isAdding}>
                     {isAdding ? "Adding..." : "Add to plan"}
                   </button>
                 </div>

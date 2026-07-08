@@ -5,11 +5,11 @@ import { FormEvent, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { RequireAuth } from "@/components/RequireAuth";
 import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
+import { useApiResource } from "@/hooks/useApiResource";
 import { api } from "@/lib/api";
 import { toPlan } from "@/lib/adapters";
 import { formatTimeRange } from "@/lib/format";
 import type { OneDayPlan } from "@/lib/types";
-import { useApiResource } from "@/hooks/useApiResource";
 
 function tomorrow() {
   const date = new Date();
@@ -64,13 +64,16 @@ export default function PlannerPage() {
     const index = activePlan.items.findIndex((item) => item.id === itemId);
     const nextIndex = index + direction;
     if (index < 0 || nextIndex < 0 || nextIndex >= activePlan.items.length) return;
+
     const nextItems = [...activePlan.items];
     const [item] = nextItems.splice(index, 1);
     nextItems.splice(nextIndex, 0, item);
+
     const optimisticPlan = { ...activePlan, items: nextItems };
     setData(plans.map((plan) => (plan.id === activePlan.id ? optimisticPlan : plan)));
     setPendingItemId(itemId);
     setActionError("");
+
     try {
       const nextPlan = toPlan(await api.reorderPlanItems(activePlan.id, nextItems.map((planItem) => planItem.id)));
       setData(plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
@@ -89,14 +92,16 @@ export default function PlannerPage() {
           <div>
             <p className="eyebrow">One-day planner</p>
             <h1>{activePlan?.title ?? "Build an SF day plan"}</h1>
-            <p className="lead">Backend itineraries now own the timeline, warnings, item order, and removals.</p>
+            <p className="lead">Saved events become a real timeline with overlap and travel warnings, not just a wishlist.</p>
 
             {plans.length > 1 ? (
               <label className="field compact-field">
                 <span>Plan</span>
                 <select value={activePlan?.id ?? ""} onChange={(event) => setSelectedPlanId(event.target.value)}>
                   {plans.map((plan) => (
-                    <option key={plan.id} value={plan.id}>{plan.title} · {plan.date}</option>
+                    <option key={plan.id} value={plan.id}>
+                      {plan.title} | {plan.date}
+                    </option>
                   ))}
                 </select>
               </label>
@@ -108,8 +113,8 @@ export default function PlannerPage() {
 
             {activePlan?.warnings.length ? (
               <div className="grid">
-                {activePlan.warnings.map((warning) => (
-                  <div className="warning" key={warning.id}>{warning.message}</div>
+                {activePlan.warnings.map((warning, index) => (
+                  <div className="warning" key={warning.id ?? `${warning.type}-${index}`}>{warning.message}</div>
                 ))}
               </div>
             ) : null}
@@ -119,7 +124,11 @@ export default function PlannerPage() {
                 <EmptyState title="No plan yet" body="Create a plan here, or add an event from Discover and one will be created for you." />
               ) : null}
               {activePlan && activePlan.items.length === 0 ? (
-                <EmptyState title="Your timeline is empty" body="Add events from Discover or Saved to start shaping the day." action={<Link className="button secondary" href="/discover">Find events</Link>} />
+                <EmptyState
+                  title="Your timeline is empty"
+                  body="Add events from Discover or Saved to start shaping the day."
+                  action={<Link className="button secondary" href="/discover">Find events</Link>}
+                />
               ) : null}
               {activePlan?.items.map((item) => (
                 <article className="timeline-item" key={item.id}>
@@ -130,13 +139,13 @@ export default function PlannerPage() {
                     <div className="why">{item.event.recommendation.label}</div>
                   </div>
                   <div className="actions">
-                    <button className="button secondary" type="button" onClick={() => move(item.id, -1)} disabled={pendingItemId === item.id}>
+                    <button className="button secondary" type="button" onClick={() => void move(item.id, -1)} disabled={pendingItemId === item.id}>
                       Up
                     </button>
-                    <button className="button secondary" type="button" onClick={() => move(item.id, 1)} disabled={pendingItemId === item.id}>
+                    <button className="button secondary" type="button" onClick={() => void move(item.id, 1)} disabled={pendingItemId === item.id}>
                       Down
                     </button>
-                    <button className="button danger" type="button" onClick={() => remove(item.id)} disabled={pendingItemId === item.id}>
+                    <button className="button danger" type="button" onClick={() => void remove(item.id)} disabled={pendingItemId === item.id}>
                       {pendingItemId === item.id ? "Working..." : "Remove"}
                     </button>
                   </div>
@@ -146,7 +155,7 @@ export default function PlannerPage() {
           </div>
           <aside className="panel sticky-panel">
             <h3>Create a plan</h3>
-            <p className="subtle">Multiple plans are supported by the backend; use one per date or trip intent.</p>
+            <p className="subtle">The backend supports multiple plans, so users can keep one per date or intent.</p>
             <form className="form-stack compact-stack" onSubmit={createPlan}>
               <label className="field">
                 <span>Title</span>
@@ -161,8 +170,12 @@ export default function PlannerPage() {
               </button>
             </form>
             <div className="actions">
-              <Link className="button secondary" href="/saved">Add saved events</Link>
-              <Link className="button secondary" href="/discover">Find more</Link>
+              <Link className="button secondary" href="/saved">
+                Add saved events
+              </Link>
+              <Link className="button secondary" href="/discover">
+                Find more
+              </Link>
             </div>
           </aside>
         </section>

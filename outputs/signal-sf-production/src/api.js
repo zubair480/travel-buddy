@@ -7,6 +7,7 @@ import {
   createUserPlan,
   getBootstrap,
   getEventDetail,
+  getRecommendationLanes,
   getRecommendations,
   getUserProfile,
   listUserPlans,
@@ -16,6 +17,7 @@ import {
   saveUserEvent,
   submitFeedback,
   unsaveUserEvent,
+  getSavedEvents,
   updateUserProfile,
   updateUserPreferences,
   validateUserPlan,
@@ -35,6 +37,13 @@ function requireUser(context) {
 
 function parseList(searchParams, key) {
   return searchParams.getAll(key).filter(Boolean);
+}
+
+function parsePagination(searchParams) {
+  return {
+    page: searchParams.get("page") ?? "1",
+    pageSize: searchParams.get("pageSize") ?? "20",
+  };
 }
 
 function withSessionCookie(response, payload, cookie) {
@@ -146,8 +155,10 @@ export async function handleApiRequest(context) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/events") {
-    sendJson(response, 200, {
-      data: getRecommendations(
+    sendJson(
+      response,
+      200,
+      getRecommendations(
         user.id,
         {
           date: url.searchParams.get("date") ?? "",
@@ -156,8 +167,9 @@ export async function handleApiRequest(context) {
           neighborhoodSlugs: parseList(url.searchParams, "neighborhoods"),
         },
         url.searchParams.get("sort") ?? "recommended",
+        parsePagination(url.searchParams),
       ),
-    });
+    );
     return;
   }
 
@@ -173,7 +185,7 @@ export async function handleApiRequest(context) {
 
   if (request.method === "GET" && url.pathname === "/api/me/recommendations") {
     sendJson(response, 200, {
-      data: getRecommendations(
+      ...getRecommendations(
         user.id,
         {
           date: url.searchParams.get("date") ?? "",
@@ -182,9 +194,15 @@ export async function handleApiRequest(context) {
           neighborhoodSlugs: parseList(url.searchParams, "neighborhoods"),
         },
         url.searchParams.get("sort") ?? "recommended",
+        parsePagination(url.searchParams),
       ),
       debug: { algorithmVersion: "prod-v1" },
     });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/me/recommendation-lanes") {
+    sendJson(response, 200, { data: getRecommendationLanes(user.id) });
     return;
   }
 
@@ -192,6 +210,11 @@ export async function handleApiRequest(context) {
     const body = await parseJsonBody(request);
     saveUserEvent(user.id, body.eventId);
     sendJson(response, 200, { data: { eventId: body.eventId, saved: true } });
+    return;
+  }
+
+  if (request.method === "GET" && url.pathname === "/api/me/saved-events") {
+    sendJson(response, 200, { data: getSavedEvents(user.id) });
     return;
   }
 

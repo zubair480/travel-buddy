@@ -25,18 +25,21 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       <header className="topbar">
         <Link className="brand" href="/">
           <span className="brand-mark" />
-          <span>Fogline</span>
+          <span className="brand-lockup">
+            <strong>SF Buddy</strong>
+            <span className="brand-kicker">San Francisco plans with taste</span>
+          </span>
         </Link>
         <nav className="nav" aria-label="Primary">
           <Link href="/discover">Discover</Link>
           <Link href="/saved">Saved</Link>
           <Link href="/planner">Planner</Link>
-          <Link href="/preferences">Preferences</Link>
+          <Link href="/preferences">Setup</Link>
         </nav>
         <div className="session-nav">
           {status === "authenticated" ? (
             <>
-              <span>{user?.displayName || user?.email}</span>
+              <span className="session-user">{user?.displayName || user?.email}</span>
               <button className="link-button" type="button" onClick={handleLogout} disabled={isLoggingOut}>
                 {isLoggingOut ? "Signing out..." : "Logout"}
               </button>

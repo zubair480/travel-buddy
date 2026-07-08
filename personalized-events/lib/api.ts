@@ -24,18 +24,38 @@ type RequestOptions = Omit<RequestInit, "body"> & {
   body?: unknown;
 };
 
+function normalizePath(path: string) {
+  if (/^https?:\/\//.test(path)) return path;
+  if (path.startsWith("/api/")) return path;
+  if (path.startsWith("/")) return `/api${path}`;
+  return `/api/${path}`;
+}
+
+function buildRequestBody(body: unknown) {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body === "string") return body;
+  if (body instanceof FormData) return body;
+  if (body instanceof URLSearchParams) return body;
+  if (body instanceof Blob) return body;
+  return JSON.stringify(body);
+}
+
 async function request<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const response = await fetch(path, {
+  const headers = new Headers(options.headers);
+  const body = buildRequestBody(options.body);
+
+  if (body && typeof body === "string" && !headers.has("Content-Type")) {
+    headers.set("Content-Type", "application/json");
+  }
+
+  const response = await fetch(normalizePath(path), {
     ...options,
     credentials: "include",
-    headers: {
-      "Content-Type": "application/json",
-      ...options.headers,
-    },
-    body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    headers,
+    body,
   });
-  const payload = await response.json().catch(() => null);
 
+  const payload = await response.json().catch(() => null);
   if (!response.ok) {
     const message = payload?.error || `Request failed with status ${response.status}`;
     throw new ApiError(message, response.status);
@@ -44,113 +64,86 @@ async function request<T>(path: string, options: RequestOptions = {}): Promise<T
   return payload as T;
 }
 
-function data<T>(payload: ApiEnvelope<T>) {
+function unwrap<T>(payload: ApiEnvelope<T>) {
   return payload.data;
 }
 
 function buildEventQuery(filters: EventFilters) {
   const params = new URLSearchParams();
-  if (filters.q.trim()) params.set("q", filters.q.trim());
+
+  if (filters.q?.trim()) params.set("q", filters.q.trim());
+  if (filters.date) params.set("date", filters.date);
   if (filters.category !== "any") params.append("categories", filters.category);
   if (filters.neighborhood !== "any") params.append("neighborhoods", filters.neighborhood);
-  if (filters.sort === "soonest") params.set("sort", "soonest");
-  if (filters.sort === "popular") params.set("sort", "popular");
-  if (filters.sort === "price-low") params.set("sort", "price_low_to_high");
 
-  if (filters.date === "today" || filters.date === "tomorrow") {
-    const date = new Date();
-    if (filters.date === "tomorrow") date.setDate(date.getDate() + 1);
-    params.set("date", date.toISOString().slice(0, 10));
-  }
+  if (filters.sort === "soonest") params.set("sort", "soonest");
+  else if (filters.sort === "popular") params.set("sort", "popular");
+  else if (filters.sort === "price-low") params.set("sort", "price_low_to_high");
+  else params.set("sort", "recommended");
 
   return params.toString();
 }
 
-export const api = {
-  async me() {
-    return data(await request<ApiEnvelope<AuthState>>("/api/me"));
-  },
-
-  async login(input: { email: string; password: string }) {
-    return data(await request<ApiEnvelope<BackendUser>>("/api/auth/login", { method: "POST", body: input }));
-  },
-
-  async register(input: { email: string; password: string; displayName: string }) {
-    return data(await request<ApiEnvelope<BackendUser>>("/api/auth/register", { method: "POST", body: input }));
-  },
-
-  async logout() {
-    return data(await request<ApiEnvelope<{ ok: true }>>("/api/auth/logout", { method: "POST" }));
-  },
-
-  async bootstrap() {
-    return data(await request<ApiEnvelope<BootstrapPayload>>("/api/bootstrap"));
-  },
-
-  async profile() {
-    return data(await request<ApiEnvelope<BackendProfile>>("/api/me/profile"));
-  },
-
-  async updateProfile(profile: UserProfile) {
-    return data(await request<ApiEnvelope<BackendProfile>>("/api/me/profile", { method: "PUT", body: profile }));
-  },
-
-  async preferences() {
-    return data(await request<ApiEnvelope<BackendPreferences>>("/api/me/preferences"));
-  },
-
-  async updatePreferences(preferences: UserPreferences) {
-    return data(await request<ApiEnvelope<BackendPreferences>>("/api/me/preferences", { method: "PUT", body: preferences }));
-  },
-
-  async recommendations(filters: EventFilters) {
-    const query = buildEventQuery(filters);
-    return data(await request<ApiEnvelope<BackendEventCard[]>>(`/api/me/recommendations${query ? `?${query}` : ""}`));
-  },
-
-  async eventDetail(id: string) {
-    return request<ApiEnvelope<BackendEventCard> & { related?: BackendEventCard[] }>(`/api/events/${encodeURIComponent(id)}`);
-  },
-
-  async saveEvent(eventId: string) {
-    return data(await request<ApiEnvelope<{ eventId: string; saved: true }>>("/api/me/saved-events", { method: "POST", body: { eventId } }));
-  },
-
-  async unsaveEvent(eventId: string) {
-    return data(await request<ApiEnvelope<{ eventId: string; saved: false }>>(`/api/me/saved-events/${encodeURIComponent(eventId)}`, { method: "DELETE" }));
-  },
-
-  async plans() {
-    return data(await request<ApiEnvelope<BackendHydratedPlan[]>>("/api/me/itineraries"));
-  },
-
-  async createPlan(input: { title: string; planDate: string; notes?: string }) {
-    return data(await request<ApiEnvelope<{ id: string }>>("/api/me/itineraries", { method: "POST", body: input }));
-  },
-
-  async updatePlan(planId: string, input: { title?: string; notes?: string }) {
-    return data(await request<ApiEnvelope<{ id: string }>>(`/api/me/itineraries/${encodeURIComponent(planId)}`, { method: "PATCH", body: input }));
-  },
-
-  async addPlanItem(planId: string, eventId: string) {
-    return data(
-      await request<ApiEnvelope<BackendHydratedPlan>>(`/api/me/itineraries/${encodeURIComponent(planId)}/items`, {
-        method: "POST",
-        body: { eventId },
-      }),
-    );
-  },
-
-  async removePlanItem(planId: string, itemId: string) {
-    return data(await request<ApiEnvelope<BackendHydratedPlan>>(`/api/me/itineraries/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`, { method: "DELETE" }));
-  },
-
-  async reorderPlanItems(planId: string, itemIdsInOrder: string[]) {
-    return data(
-      await request<ApiEnvelope<BackendHydratedPlan>>(`/api/me/itineraries/${encodeURIComponent(planId)}/items/reorder`, {
-        method: "POST",
-        body: { itemIdsInOrder },
-      }),
-    );
-  },
+type ApiCallable = {
+  <T>(path: string, options?: RequestOptions): Promise<T>;
+  me: () => Promise<AuthState>;
+  login: (input: { email: string; password: string }) => Promise<BackendUser>;
+  register: (input: { email: string; password: string; displayName: string }) => Promise<BackendUser>;
+  logout: () => Promise<{ ok: true }>;
+  bootstrap: () => Promise<BootstrapPayload>;
+  profile: () => Promise<BackendProfile>;
+  updateProfile: (profile: UserProfile) => Promise<BackendProfile>;
+  preferences: () => Promise<BackendPreferences>;
+  updatePreferences: (preferences: UserPreferences) => Promise<BackendPreferences>;
+  recommendations: (filters: EventFilters) => Promise<BackendEventCard[]>;
+  eventDetail: (id: string) => Promise<ApiEnvelope<BackendEventCard> & { related?: BackendEventCard[] }>;
+  savedEvents: () => Promise<BackendEventCard[]>;
+  saveEvent: (eventId: string) => Promise<{ eventId: string; saved: true }>;
+  unsaveEvent: (eventId: string) => Promise<{ eventId: string; saved: false }>;
+  plans: () => Promise<BackendHydratedPlan[]>;
+  createPlan: (input: { title: string; planDate: string; notes?: string }) => Promise<{ id: string }>;
+  updatePlan: (planId: string, input: { title?: string; notes?: string }) => Promise<{ id: string }>;
+  addPlanItem: (planId: string, eventId: string) => Promise<BackendHydratedPlan>;
+  removePlanItem: (planId: string, itemId: string) => Promise<BackendHydratedPlan>;
+  reorderPlanItems: (planId: string, itemIdsInOrder: string[]) => Promise<BackendHydratedPlan>;
 };
+
+const callable = (<T>(path: string, options?: RequestOptions) => request<T>(path, options)) as ApiCallable;
+
+callable.me = async () => unwrap(await request<ApiEnvelope<AuthState>>("me"));
+callable.login = async (input) => unwrap(await request<ApiEnvelope<BackendUser>>("auth/login", { method: "POST", body: input }));
+callable.register = async (input) => unwrap(await request<ApiEnvelope<BackendUser>>("auth/register", { method: "POST", body: input }));
+callable.logout = async () => unwrap(await request<ApiEnvelope<{ ok: true }>>("auth/logout", { method: "POST" }));
+callable.bootstrap = async () => unwrap(await request<ApiEnvelope<BootstrapPayload>>("bootstrap"));
+callable.profile = async () => unwrap(await request<ApiEnvelope<BackendProfile>>("me/profile"));
+callable.updateProfile = async (profile) => unwrap(await request<ApiEnvelope<BackendProfile>>("me/profile", { method: "PUT", body: profile }));
+callable.preferences = async () => unwrap(await request<ApiEnvelope<BackendPreferences>>("me/preferences"));
+callable.updatePreferences = async (preferences) =>
+  unwrap(await request<ApiEnvelope<BackendPreferences>>("me/preferences", { method: "PUT", body: preferences }));
+callable.recommendations = async (filters) => {
+  const query = buildEventQuery(filters);
+  const payload = await request<ApiEnvelope<BackendEventCard[]>>(`me/recommendations${query ? `?${query}` : ""}`);
+  return payload.data;
+};
+callable.eventDetail = async (id) => request<ApiEnvelope<BackendEventCard> & { related?: BackendEventCard[] }>(`events/${encodeURIComponent(id)}`);
+callable.savedEvents = async () => unwrap(await request<ApiEnvelope<BackendEventCard[]>>("me/saved-events"));
+callable.saveEvent = async (eventId) => unwrap(await request<ApiEnvelope<{ eventId: string; saved: true }>>("me/saved-events", { method: "POST", body: { eventId } }));
+callable.unsaveEvent = async (eventId) =>
+  unwrap(await request<ApiEnvelope<{ eventId: string; saved: false }>>(`me/saved-events/${encodeURIComponent(eventId)}`, { method: "DELETE" }));
+callable.plans = async () => unwrap(await request<ApiEnvelope<BackendHydratedPlan[]>>("me/itineraries"));
+callable.createPlan = async (input) => unwrap(await request<ApiEnvelope<{ id: string }>>("me/itineraries", { method: "POST", body: input }));
+callable.updatePlan = async (planId, input) =>
+  unwrap(await request<ApiEnvelope<{ id: string }>>(`me/itineraries/${encodeURIComponent(planId)}`, { method: "PATCH", body: input }));
+callable.addPlanItem = async (planId, eventId) =>
+  unwrap(await request<ApiEnvelope<BackendHydratedPlan>>(`me/itineraries/${encodeURIComponent(planId)}/items`, { method: "POST", body: { eventId } }));
+callable.removePlanItem = async (planId, itemId) =>
+  unwrap(await request<ApiEnvelope<BackendHydratedPlan>>(`me/itineraries/${encodeURIComponent(planId)}/items/${encodeURIComponent(itemId)}`, { method: "DELETE" }));
+callable.reorderPlanItems = async (planId, itemIdsInOrder) =>
+  unwrap(
+    await request<ApiEnvelope<BackendHydratedPlan>>(`me/itineraries/${encodeURIComponent(planId)}/items/reorder`, {
+      method: "POST",
+      body: { itemIdsInOrder },
+    }),
+  );
+
+export const api = callable;

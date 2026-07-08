@@ -119,6 +119,11 @@ export interface BackendEventCard {
   recommendation: BackendRecommendation;
 }
 
+export interface BackendEventDetailResponse {
+  data: BackendEventCard;
+  related: BackendEventCard[];
+}
+
 export interface BackendPlan {
   id: string;
   userId: string;
@@ -160,13 +165,28 @@ export interface BackendHydratedPlan {
   warnings: BackendPlannerWarning[];
 }
 
+export interface BackendProfileInsights {
+  inferredThemes: string[];
+  hasResumeContext: boolean;
+  profileCompletenessScore: number;
+}
+
+export interface BackendLane {
+  key: string;
+  title: string;
+  description: string;
+  items: BackendEventCard[];
+}
+
 export interface BootstrapPayload {
   user: BackendUser;
   profile: BackendProfile;
   preferences: BackendPreferences;
+  profileInsights?: BackendProfileInsights;
   neighborhoods: BackendNeighborhood[];
   categories: string[];
   recommendations: BackendEventCard[];
+  recommendationLanes: BackendLane[];
   saved: BackendEventCard[];
   plans: BackendPlan[];
 }

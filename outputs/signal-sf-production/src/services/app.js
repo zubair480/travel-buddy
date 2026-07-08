@@ -34,6 +34,48 @@ function mapById(items) {
   return new Map(items.map((item) => [item.id, item]));
 }
 
+function normalizePageNumber(value, fallback) {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 1) return fallback;
+  return Math.floor(parsed);
+}
+
+function paginate(items, { page = 1, pageSize = 20 } = {}) {
+  const safePage = normalizePageNumber(page, 1);
+  const safePageSize = Math.min(Math.max(normalizePageNumber(pageSize, 20), 1), 50);
+  const start = (safePage - 1) * safePageSize;
+  const data = items.slice(start, start + safePageSize);
+
+  return {
+    data,
+    meta: {
+      page: safePage,
+      pageSize: safePageSize,
+      total: items.length,
+      hasMore: start + safePageSize < items.length,
+    },
+  };
+}
+
+function deriveProfileInsights(profile) {
+  const sourceText = `${profile.bio ?? ""} ${profile.resumeText ?? ""} ${profile.networkingIntent ?? ""}`.toLowerCase();
+  const keywords = ["ai", "frontend", "backend", "product", "design", "data", "founder", "community", "growth", "sales"];
+  const inferredThemes = keywords.filter((keyword) => sourceText.includes(keyword)).slice(0, 5);
+
+  return {
+    inferredThemes,
+    hasResumeContext: Boolean(profile.resumeText?.trim()),
+    profileCompletenessScore: [
+      profile.primaryGoals.length > 0,
+      profile.targetRoles.length > 0,
+      profile.skills.length > 0,
+      Boolean(profile.networkingIntent?.trim()),
+      Boolean(profile.bio?.trim()),
+      Boolean(profile.resumeText?.trim()),
+    ].filter(Boolean).length,
+  };
+}
+
 function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
   const preferences = findPreferencesByUserId(userId);
   const profile = ensureProfile(userId);
@@ -82,20 +124,64 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
 }
 
 export function getBootstrap(user) {
+  const profile = ensureProfile(user.id);
   const cards = buildEventCards({ userId: user.id, sort: "recommended" });
   return {
     user,
-    profile: ensureProfile(user.id),
+    profile,
+    profileInsights: deriveProfileInsights(profile),
     preferences: findPreferencesByUserId(user.id),
     neighborhoods: listNeighborhoods(),
     recommendations: cards.slice(0, 8),
+    recommendationLanes: getRecommendationLanes(user.id),
     saved: cards.filter((card) => card.saved),
     plans: listPlansForUser(user.id),
   };
 }
 
-export function getRecommendations(userId, filters, sort) {
-  return buildEventCards({ userId, filters, sort });
+export function getRecommendations(userId, filters, sort, pagination) {
+  const cards = buildEventCards({ userId, filters, sort });
+  return paginate(cards, pagination);
+}
+
+export function getRecommendationLanes(userId) {
+  const laneConfigs = [
+    {
+      key: "for_you",
+      title: "For you",
+      description: "Your strongest overall matches across SF.",
+      filters: {},
+    },
+    {
+      key: "learn",
+      title: "Learn",
+      description: "Events that look useful for skill-building and practical learning.",
+      filters: { categories: ["tech", "community", "wellness", "film"] },
+    },
+    {
+      key: "find_job",
+      title: "Find a job",
+      description: "Events more likely to lead to career upside and hiring conversations.",
+      filters: { categories: ["tech", "community"] },
+    },
+    {
+      key: "build_startup",
+      title: "Build a startup",
+      description: "Founder, operator, and early-stage energy in one lane.",
+      filters: { categories: ["tech", "community", "nightlife"] },
+    },
+    {
+      key: "connect_in_tech",
+      title: "Meet tech people",
+      description: "Networking-friendly picks with strong builder overlap.",
+      filters: { categories: ["tech", "community", "nightlife", "art"] },
+    },
+  ];
+
+  return laneConfigs.map((lane) => ({
+    ...lane,
+    items: buildEventCards({ userId, filters: lane.filters, sort: "recommended" }).slice(0, 4),
+  }));
 }
 
 export function getEventDetail(userId, eventId) {
@@ -104,8 +190,7 @@ export function getEventDetail(userId, eventId) {
   if (!detail) return null;
   const related = cards
     .filter((item) => item.event.id !== eventId && (item.event.category === detail.event.category || item.event.neighborhoodId === detail.event.neighborhoodId))
-    .slice(0, 3)
-    .map((item) => item.recommendation);
+    .slice(0, 3);
   return { data: detail, related };
 }
 
@@ -159,6 +244,10 @@ export function saveUserEvent(userId, eventId) {
 export function unsaveUserEvent(userId, eventId) {
   unsaveEvent(userId, eventId);
   recordFeedback({ id: createId("feedback"), userId, eventId, signal: "unsaved", value: 1, createdAt: new Date().toISOString() });
+}
+
+export function getSavedEvents(userId) {
+  return buildEventCards({ userId, filters: {}, sort: "recommended" }).filter((card) => card.saved);
 }
 
 export function submitFeedback(userId, eventId, signal, value = 1) {

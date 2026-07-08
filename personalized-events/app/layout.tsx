@@ -3,12 +3,12 @@ import { AuthProvider } from "@/components/AuthProvider";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Fogline | SF Events",
-  description: "Personalized San Francisco events and one-day plans."
+  title: "SF Buddy | San Francisco Plans",
+  description: "Personalized San Francisco events, plans, and guided local discovery.",
 };
 
 export default function RootLayout({
-  children
+  children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
