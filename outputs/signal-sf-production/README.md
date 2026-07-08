@@ -93,6 +93,7 @@ The backend can now fetch/import SF events from configured providers through the
 - Pie Social: configured calendar feeds via `PIE_SOCIAL_ICS_URLS`.
 - Partiful: no first-party public discovery API is assumed. Import public events by configured JSON-LD event pages only when `ENABLE_PUBLIC_EVENT_SCRAPING=true`.
 - Other SF event sources: configured RSS, ICS, or JSON-LD pages via `SF_EVENT_FEED_URLS`.
+- Bright Data: optional public-page renderer via `BRIGHT_DATA_BROWSER_WS_ENDPOINT` and `BRIGHT_DATA_SOURCE_URLS`. Use this for JavaScript-rendered public event pages when feeds or official APIs are not available.
 
 Use comma-separated URLs for feed env vars:
 
@@ -105,7 +106,26 @@ PIE_SOCIAL_ICS_URLS=https://example.com/pie-social.ics
 SF_EVENT_FEED_URLS=https://example.com/sf-events.rss,https://example.com/calendar.ics
 ENABLE_PUBLIC_EVENT_SCRAPING=true
 SCRAPE_EVENT_URLS=https://example.com/public-event-page
+ENABLE_BRIGHT_DATA_SCRAPING=true
+BRIGHT_DATA_SOURCE_URLS=https://lu.ma/sf,https://www.eventbrite.com/d/ca--san-francisco/events/
+BRIGHT_DATA_MAX_PAGES=12
 ```
+
+Configure Bright Data Browser API with either the full WSS endpoint:
+
+```bash
+BRIGHT_DATA_BROWSER_WS_ENDPOINT=wss://...
+```
+
+Or with separate fields from the Bright Data Browser API setup page:
+
+```bash
+BRIGHT_DATA_BROWSER_USERNAME=brd-customer-...-zone-scraping_browser1
+BRIGHT_DATA_BROWSER_PASSWORD=...
+BRIGHT_DATA_BROWSER_HOST=brd.superproxy.io:9222
+```
+
+Never commit the Bright Data endpoint or password. They contain credentials. Export them in your shell, load them through your process manager, or store them in deployment secrets.
 
 ### Inspect configured providers
 
@@ -120,7 +140,7 @@ curl -H "x-admin-token: dev-admin-token" \
 curl -X POST http://localhost:4180/api/admin/sync-sources \
   -H "Content-Type: application/json" \
   -H "x-admin-token: dev-admin-token" \
-  -d '{"providers":["eventbrite","meetup","luma","sf-feeds"],"dryRun":true}'
+  -d '{"providers":["eventbrite","meetup","luma","sf-feeds","bright-data"],"dryRun":true}'
 ```
 
 ### Import source events
@@ -129,10 +149,10 @@ curl -X POST http://localhost:4180/api/admin/sync-sources \
 curl -X POST http://localhost:4180/api/admin/sync-sources \
   -H "Content-Type: application/json" \
   -H "x-admin-token: dev-admin-token" \
-  -d '{"providers":["eventbrite","meetup","luma","sf-feeds"]}'
+  -d '{"providers":["eventbrite","meetup","luma","sf-feeds","bright-data"]}'
 ```
 
-Scraping should stay opt-in and limited to public pages that expose structured `schema.org/Event` JSON-LD. Do not add brittle HTML scraping for platforms that do not permit automated collection.
+Scraping should stay opt-in and limited to public pages. The importer first reads structured `schema.org/Event` JSON-LD, then falls back to event-shaped objects embedded in rendered page JSON. Do not add login, paywall, private-page, or access-control bypass flows.
 
 ## Test
 

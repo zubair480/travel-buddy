@@ -1,6 +1,13 @@
 import path from "node:path";
 
 export function getConfig(rootDir) {
+  const brightDataBrowserWsEndpoint = buildBrightDataBrowserWsEndpoint({
+    endpoint: process.env.BRIGHT_DATA_BROWSER_WS_ENDPOINT,
+    username: process.env.BRIGHT_DATA_BROWSER_USERNAME,
+    password: process.env.BRIGHT_DATA_BROWSER_PASSWORD,
+    host: process.env.BRIGHT_DATA_BROWSER_HOST,
+  });
+
   return {
     appName: "Signal SF",
     port: Number(process.env.PORT ?? 4180),
@@ -17,8 +24,24 @@ export function getConfig(rootDir) {
       sfEventFeedUrls: parseListEnv(process.env.SF_EVENT_FEED_URLS),
       scrapeEventUrls: parseListEnv(process.env.SCRAPE_EVENT_URLS),
       enablePublicEventScraping: process.env.ENABLE_PUBLIC_EVENT_SCRAPING === "true",
+      brightDataBrowserWsEndpoint,
+      brightDataSourceUrls: parseListEnv(process.env.BRIGHT_DATA_SOURCE_URLS),
+      enableBrightDataScraping: process.env.ENABLE_BRIGHT_DATA_SCRAPING === "true",
+      brightDataMaxPages: Number(process.env.BRIGHT_DATA_MAX_PAGES ?? 12),
     },
   };
+}
+
+function buildBrightDataBrowserWsEndpoint({ endpoint, username, password, host }) {
+  if (endpoint) return endpoint;
+  if (!username || !password || !host) return "";
+
+  const normalizedHost = String(host)
+    .replace(/^wss?:\/\//i, "")
+    .replace(/^https?:\/\//i, "")
+    .replace(/\/+$/, "");
+
+  return `wss://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${normalizedHost}`;
 }
 
 function parseListEnv(value) {

@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { parseIcsFeed, parseJsonLdEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
+import { parseEmbeddedEventJson, parseIcsFeed, parseJsonLdEvents, parseRssFeed } from "../src/services/sourceIntegrations.js";
 
 test("parseIcsFeed converts calendar events to ingestion records", () => {
   const records = parseIcsFeed(
@@ -75,4 +75,36 @@ test("parseJsonLdEvents extracts schema.org Event records", () => {
   assert.equal(records[0].category, "tech");
   assert.equal(records[0].neighborhoodSlug, "hayes-valley");
   assert.equal(records[0].priceText, "$20");
+});
+
+test("parseEmbeddedEventJson extracts event-shaped records from rendered page data", () => {
+  const records = parseEmbeddedEventJson(
+    `<html><script>
+      window.__APP_DATA__ = {
+        "props": {
+          "events": [
+            {
+              "id": "partiful-1",
+              "title": "Founders Rooftop Mixer",
+              "startsAt": "2026-07-18T18:30:00-07:00",
+              "endsAt": "2026-07-18T21:00:00-07:00",
+              "url": "/events/founders-rooftop",
+              "description": "Startup operators and AI founders in SoMa.",
+              "venue": { "name": "SoMa Loft", "address": "2nd Street, San Francisco, CA" },
+              "offers": { "price": 0 }
+            }
+          ]
+        }
+      };
+    </script></html>`,
+    "bright-data",
+    "https://partiful.com",
+  );
+
+  assert.equal(records.length, 1);
+  assert.equal(records[0].providerEventId, "partiful-1");
+  assert.equal(records[0].sourceUrl, "https://partiful.com/events/founders-rooftop");
+  assert.equal(records[0].category, "tech");
+  assert.equal(records[0].neighborhoodSlug, "soma");
+  assert.equal(records[0].priceText, "Free");
 });

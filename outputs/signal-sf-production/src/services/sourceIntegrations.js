@@ -38,6 +38,11 @@ const PROVIDERS = {
     mode: "configured_ics_rss_or_jsonld",
     requires: ["SF_EVENT_FEED_URLS"],
   },
+  "bright-data": {
+    label: "Bright Data public page fetcher",
+    mode: "rendered_public_pages",
+    requires: ["BRIGHT_DATA_BROWSER_WS_ENDPOINT or BRIGHT_DATA_BROWSER_USERNAME/PASSWORD/HOST", "BRIGHT_DATA_SOURCE_URLS", "ENABLE_BRIGHT_DATA_SCRAPING=true"],
+  },
 };
 
 export function listSourceProviders(config) {
@@ -57,6 +62,9 @@ function isProviderConfigured(provider, sourceConfig) {
   if (provider === "pie-social") return sourceConfig.pieSocialIcsUrls?.length > 0;
   if (provider === "sf-feeds") return sourceConfig.sfEventFeedUrls?.length > 0;
   if (provider === "partiful") return sourceConfig.enablePublicEventScraping && sourceConfig.scrapeEventUrls?.length > 0;
+  if (provider === "bright-data") {
+    return Boolean(sourceConfig.enableBrightDataScraping && sourceConfig.brightDataBrowserWsEndpoint && sourceConfig.brightDataSourceUrls?.length);
+  }
   return false;
 }
 
@@ -74,6 +82,7 @@ export async function fetchSourceEvents({ config, providers = [], now = new Date
       else if (provider === "pie-social") results.push(await fetchIcsProvider("pie-social", sourceConfig.pieSocialIcsUrls ?? []));
       else if (provider === "sf-feeds") results.push(await fetchConfiguredFeeds(sourceConfig.sfEventFeedUrls ?? []));
       else if (provider === "partiful") results.push(await fetchPublicJsonLdProvider("partiful", sourceConfig));
+      else if (provider === "bright-data") results.push(await fetchBrightDataProvider(sourceConfig));
       else results.push({ provider, imported: [], skipped: true, reason: "Unknown provider" });
     } catch (error) {
       results.push({ provider, imported: [], error: error instanceof Error ? error.message : String(error) });
@@ -222,6 +231,58 @@ async function fetchPublicJsonLdProvider(provider, sourceConfig) {
   return { provider, imported: batches.flat() };
 }
 
+async function fetchBrightDataProvider(sourceConfig) {
+  if (!sourceConfig.enableBrightDataScraping) {
+    return { provider: "bright-data", imported: [], skipped: true, reason: "ENABLE_BRIGHT_DATA_SCRAPING must be true" };
+  }
+  if (!sourceConfig.brightDataBrowserWsEndpoint) {
+    return { provider: "bright-data", imported: [], skipped: true, reason: "BRIGHT_DATA_BROWSER_WS_ENDPOINT or Bright Data username/password/host is not configured" };
+  }
+  if (!sourceConfig.brightDataSourceUrls?.length) {
+    return { provider: "bright-data", imported: [], skipped: true, reason: "BRIGHT_DATA_SOURCE_URLS is not configured" };
+  }
+
+  const maxPages = Number.isFinite(sourceConfig.brightDataMaxPages) ? sourceConfig.brightDataMaxPages : 12;
+  const urls = sourceConfig.brightDataSourceUrls.slice(0, Math.max(1, maxPages));
+  const { chromium } = await loadPlaywright();
+  const browser = await chromium.connectOverCDP(sourceConfig.brightDataBrowserWsEndpoint);
+  const imported = [];
+  const failures = [];
+
+  try {
+    for (const url of urls) {
+      const page = await browser.newPage();
+      try {
+        await page.goto(url, { waitUntil: "networkidle", timeout: 60000 });
+        const html = await page.content();
+        const jsonLdRecords = parseJsonLdEvents(html, "bright-data", url);
+        const embeddedRecords = parseEmbeddedEventJson(html, "bright-data", url);
+        imported.push(...dedupeRecords([...jsonLdRecords, ...embeddedRecords]));
+      } catch (error) {
+        failures.push({ url, error: error instanceof Error ? error.message : String(error) });
+      } finally {
+        await page.close().catch(() => {});
+      }
+    }
+  } finally {
+    await browser.close().catch(() => {});
+  }
+
+  return { provider: "bright-data", imported: dedupeRecords(imported), failures };
+}
+
+async function loadPlaywright() {
+  try {
+    return await import("playwright-core");
+  } catch {
+    try {
+      return await import("playwright");
+    } catch {
+      throw new Error("Bright Data scraping requires the playwright-core package. Run npm install in outputs/signal-sf-production.");
+    }
+  }
+}
+
 export function parseIcsFeed(text, provider, sourceUrl) {
   return splitIcsEvents(text)
     .map((event) => {
@@ -326,6 +387,139 @@ export function parseJsonLdEvents(html, provider, sourceUrl) {
   return records.filter(Boolean);
 }
 
+export function parseEmbeddedEventJson(html, provider, sourceUrl) {
+  const records = [];
+  for (const raw of extractScriptBodies(html)) {
+    const text = decodeHtmlEntities(stripScriptAssignment(raw));
+    const parsed = safeJsonParse(text);
+    if (!parsed) continue;
+    for (const candidate of findEventLikeObjects(parsed)) {
+      const record = eventLikeObjectToRecord(candidate, provider, sourceUrl);
+      if (record) records.push(record);
+    }
+  }
+  return dedupeRecords(records);
+}
+
+function extractScriptBodies(html) {
+  return Array.from(html.matchAll(/<script\b[^>]*>([\s\S]*?)<\/script>/gi))
+    .map((match) => match[1]?.trim())
+    .filter(Boolean);
+}
+
+function stripScriptAssignment(text) {
+  const trimmed = String(text ?? "").trim();
+  if (trimmed.startsWith("{") || trimmed.startsWith("[")) return trimmed;
+  const nextData = trimmed.match(/self\.__next_f\.push\(\s*(\[.*\])\s*\)/s);
+  if (nextData) return nextData[1];
+  const assignment = trimmed.match(/(?:window\.)?[A-Z0-9_$]+(?:\.[A-Z0-9_$]+)?\s*=\s*({[\s\S]*}|\[[\s\S]*\])\s*;?$/i);
+  return assignment?.[1] ?? "";
+}
+
+function safeJsonParse(text) {
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function findEventLikeObjects(value, seen = new Set()) {
+  if (!value || typeof value !== "object" || seen.has(value)) return [];
+  seen.add(value);
+
+  if (Array.isArray(value)) return value.flatMap((item) => findEventLikeObjects(item, seen));
+
+  const results = [];
+  if (hasEventShape(value)) results.push(value);
+  for (const child of Object.values(value)) results.push(...findEventLikeObjects(child, seen));
+  return results;
+}
+
+function hasEventShape(value) {
+  const title = value.name ?? value.title ?? value.eventName;
+  const startsAt = value.startDate ?? value.startTime ?? value.startsAt ?? value.start_at ?? value.dateTime ?? value.date;
+  const url = value.url ?? value.eventUrl ?? value.canonicalUrl ?? value.href;
+  if (!title || !startsAt) return false;
+  if (value["@type"] && !String(value["@type"]).toLowerCase().includes("event")) return false;
+  return Boolean(url || value.location || value.venue || value.description);
+}
+
+function eventLikeObjectToRecord(event, provider, sourceUrl) {
+  const title = firstString(event.name, event.title, event.eventName);
+  const startAt = firstString(event.startDate, event.startTime, event.startsAt, event.start_at, event.dateTime, event.date);
+  if (!title || !startAt) return null;
+
+  const location = Array.isArray(event.location) ? event.location[0] : event.location;
+  const venue = event.venue ?? location;
+  const address = readAddress(venue);
+  const description = stripHtml(firstString(event.description, event.summary, event.shortDescription) ?? "");
+  const rawUrl = firstString(event.url, event.eventUrl, event.canonicalUrl, event.href);
+  const source = normalizeEventUrl(rawUrl, sourceUrl);
+  const image = event.image ?? event.photo ?? event.coverImage;
+  const offers = Array.isArray(event.offers) ? event.offers[0] : event.offers;
+
+  return {
+    provider,
+    providerEventId: firstString(event.id, event._id, event.slug, event.identifier?.value) || source || `${provider}-${title}-${startAt}`,
+    sourceUrl: source ?? sourceUrl,
+    title,
+    description,
+    category: inferCategory(`${title} ${description}`),
+    tags: [provider, ...inferTags(`${title} ${description}`)],
+    startAt,
+    endAt: firstString(event.endDate, event.endTime, event.endsAt, event.end_at) ?? null,
+    timezone: firstString(event.timezone, event.timeZone) ?? "America/Los_Angeles",
+    venueName: firstString(venue?.name, venue?.title, address) || `${PROVIDERS[provider]?.label ?? "SF"} venue TBA`,
+    neighborhoodSlug: inferNeighborhoodSlug(`${venue?.name ?? ""} ${address ?? ""} ${description}`),
+    imageUrl: Array.isArray(image) ? firstString(image[0]?.url, image[0]) : firstString(image?.url, image),
+    priceText: readPriceText(offers, description),
+    popularityScore: 60,
+    qualityScore: 66,
+  };
+}
+
+function readAddress(value) {
+  if (!value) return "";
+  if (typeof value.address === "string") return value.address;
+  return [value.address?.streetAddress, value.address?.addressLocality, value.address?.addressRegion].filter(Boolean).join(", ");
+}
+
+function readPriceText(offers, fallbackText) {
+  if (offers?.price === 0 || offers?.price === "0") return "Free";
+  if (offers?.price) return `$${offers.price}`;
+  if (offers?.lowPrice) return `$${offers.lowPrice}`;
+  return inferPriceText(fallbackText);
+}
+
+function normalizeEventUrl(value, sourceUrl) {
+  if (!value) return null;
+  try {
+    return new URL(value, sourceUrl).toString();
+  } catch {
+    return String(value);
+  }
+}
+
+function firstString(...values) {
+  for (const value of values) {
+    if (typeof value === "string" && value.trim()) return value.trim();
+    if (typeof value === "number") return String(value);
+  }
+  return "";
+}
+
+function dedupeRecords(records) {
+  const seen = new Set();
+  return records.filter((record) => {
+    const key = `${record.provider}:${record.providerEventId || record.sourceUrl || record.title}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
 function flattenJsonLd(value) {
   if (Array.isArray(value)) return value.flatMap(flattenJsonLd);
   if (value?.["@graph"]) return flattenJsonLd(value["@graph"]);
@@ -384,6 +578,14 @@ function decodeXml(value = "") {
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")
     .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function decodeHtmlEntities(value = "") {
+  return String(value)
+    .replace(/&quot;/g, '"')
+    .replace(/&amp;/g, "&")
+    .replace(/&#x27;/g, "'")
     .replace(/&#39;/g, "'");
 }
 
