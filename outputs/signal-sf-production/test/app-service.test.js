@@ -79,3 +79,82 @@ test("ingestSourceRecords creates venues for imported event sources", () => {
   assert.ok(venue);
   assert.equal(imported[0].venueId, venue.id);
 });
+
+test("getRecommendations supports date ranges for imported real events", () => {
+  ingestSourceRecords([
+    {
+      provider: "eventbrite",
+      providerEventId: "eventbrite-week-range-test",
+      title: "SF Founder Hiring Night",
+      description: "Hiring-focused founder event from Eventbrite.",
+      category: "tech",
+      tags: ["hiring", "founders"],
+      startAt: "2026-07-09T18:00:00-07:00",
+      endAt: "2026-07-09T20:00:00-07:00",
+      venueName: "Front Street Demo Hall",
+      neighborhoodSlug: "soma",
+      sourceUrl: "https://www.eventbrite.com/e/sf-founder-hiring-night-tickets-123",
+      priceText: "Free",
+    },
+    {
+      provider: "eventbrite",
+      providerEventId: "eventbrite-outside-range-test",
+      title: "SF Founder Breakfast Later",
+      description: "Outside the selected week.",
+      category: "tech",
+      tags: ["founders"],
+      startAt: "2026-08-01T09:00:00-07:00",
+      endAt: "2026-08-01T10:00:00-07:00",
+      venueName: "Later Hall",
+      neighborhoodSlug: "soma",
+      sourceUrl: "https://www.eventbrite.com/e/sf-founder-breakfast-later-tickets-456",
+      priceText: "Free",
+    },
+  ]);
+
+  const payload = getRecommendations(
+    demoUser.id,
+    { q: "founder", startDate: "2026-07-08", endDate: "2026-07-14", categories: [], neighborhoodSlugs: [] },
+    "soonest",
+    { page: 1, pageSize: 20 },
+  );
+  const titles = payload.data.map((entry) => entry.event.title);
+
+  assert.ok(titles.includes("SF Founder Hiring Night"));
+  assert.ok(!titles.includes("SF Founder Breakfast Later"));
+});
+
+test("getRecommendations search matches imported venue and source text", () => {
+  ingestSourceRecords([
+    {
+      provider: "eventbrite",
+      providerEventId: "eventbrite-week-range-test",
+      title: "SF Founder Hiring Night",
+      description: "Hiring-focused founder event from Eventbrite.",
+      category: "tech",
+      tags: ["hiring", "founders"],
+      startAt: "2026-07-09T18:00:00-07:00",
+      endAt: "2026-07-09T20:00:00-07:00",
+      venueName: "Front Street Demo Hall",
+      neighborhoodSlug: "soma",
+      sourceUrl: "https://www.eventbrite.com/e/sf-founder-hiring-night-tickets-123",
+      priceText: "Free",
+    },
+  ]);
+
+  const byVenue = getRecommendations(
+    demoUser.id,
+    { q: "front street", startDate: "2026-07-08", endDate: "2026-07-14", categories: [], neighborhoodSlugs: [] },
+    "recommended",
+    { page: 1, pageSize: 20 },
+  );
+  const bySource = getRecommendations(
+    demoUser.id,
+    { q: "eventbrite", startDate: "2026-07-08", endDate: "2026-07-14", categories: [], neighborhoodSlugs: [] },
+    "recommended",
+    { page: 1, pageSize: 20 },
+  );
+
+  assert.ok(byVenue.data.some((entry) => entry.event.title === "SF Founder Hiring Night"));
+  assert.ok(bySource.data.some((entry) => entry.event.title === "SF Founder Hiring Night"));
+});

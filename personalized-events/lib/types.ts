@@ -86,6 +86,8 @@ export interface UserPreferences {
 export interface EventFilters {
   q?: string;
   date: string;
+  startDate?: string;
+  endDate?: string;
   category: string;
   price: "any" | BudgetLevel;
   neighborhood: string;

@@ -47,6 +47,17 @@ function parsePagination(searchParams) {
   };
 }
 
+function parseEventFilters(searchParams) {
+  return {
+    date: searchParams.get("date") ?? "",
+    startDate: searchParams.get("startDate") ?? "",
+    endDate: searchParams.get("endDate") ?? "",
+    q: searchParams.get("q") ?? "",
+    categories: parseList(searchParams, "categories"),
+    neighborhoodSlugs: parseList(searchParams, "neighborhoods"),
+  };
+}
+
 function withSessionCookie(response, payload, cookie) {
   sendJson(response, 200, payload, { "Set-Cookie": cookie });
 }
@@ -196,12 +207,7 @@ export async function handleApiRequest(context) {
       200,
       getRecommendations(
         user.id,
-        {
-          date: url.searchParams.get("date") ?? "",
-          q: url.searchParams.get("q") ?? "",
-          categories: parseList(url.searchParams, "categories"),
-          neighborhoodSlugs: parseList(url.searchParams, "neighborhoods"),
-        },
+        parseEventFilters(url.searchParams),
         url.searchParams.get("sort") ?? "recommended",
         parsePagination(url.searchParams),
       ),
@@ -223,12 +229,7 @@ export async function handleApiRequest(context) {
     sendJson(response, 200, {
       ...getRecommendations(
         user.id,
-        {
-          date: url.searchParams.get("date") ?? "",
-          q: url.searchParams.get("q") ?? "",
-          categories: parseList(url.searchParams, "categories"),
-          neighborhoodSlugs: parseList(url.searchParams, "neighborhoods"),
-        },
+        parseEventFilters(url.searchParams),
         url.searchParams.get("sort") ?? "recommended",
         parsePagination(url.searchParams),
       ),

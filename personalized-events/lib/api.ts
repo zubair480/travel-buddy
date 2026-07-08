@@ -72,7 +72,12 @@ function buildEventQuery(filters: EventFilters) {
   const params = new URLSearchParams();
 
   if (filters.q?.trim()) params.set("q", filters.q.trim());
-  if (filters.date) params.set("date", filters.date);
+  if (filters.startDate || filters.endDate) {
+    if (filters.startDate) params.set("startDate", filters.startDate);
+    if (filters.endDate) params.set("endDate", filters.endDate);
+  } else if (filters.date) {
+    params.set("date", filters.date);
+  }
   if (filters.category !== "any") params.append("categories", filters.category);
   if (filters.neighborhood !== "any") params.append("neighborhoods", filters.neighborhood);
 
@@ -80,6 +85,8 @@ function buildEventQuery(filters: EventFilters) {
   else if (filters.sort === "popular") params.set("sort", "popular");
   else if (filters.sort === "price-low") params.set("sort", "price_low_to_high");
   else params.set("sort", "recommended");
+
+  params.set("pageSize", "50");
 
   return params.toString();
 }

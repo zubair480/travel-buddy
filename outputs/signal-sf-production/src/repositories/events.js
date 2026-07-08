@@ -55,11 +55,30 @@ export function listEvents(filters = {}) {
   if (filters.date) {
     conditions.push(`substr(start_at, 1, 10) = ?`);
     values.push(filters.date);
+  } else {
+    if (filters.startDate) {
+      conditions.push(`substr(start_at, 1, 10) >= ?`);
+      values.push(filters.startDate);
+    }
+    if (filters.endDate) {
+      conditions.push(`substr(start_at, 1, 10) <= ?`);
+      values.push(filters.endDate);
+    }
   }
   if (filters.q) {
-    conditions.push(`(lower(title) LIKE ? OR lower(description) LIKE ? OR lower(tags_json) LIKE ?)`);
+    conditions.push(`(
+      lower(events.title) LIKE ?
+      OR lower(events.description) LIKE ?
+      OR lower(events.tags_json) LIKE ?
+      OR lower(events.source_provider) LIKE ?
+      OR lower(events.source_url) LIKE ?
+      OR lower(venues.name) LIKE ?
+      OR lower(venues.address_line_1) LIKE ?
+      OR lower(neighborhoods.name) LIKE ?
+      OR lower(neighborhoods.slug) LIKE ?
+    )`);
     const pattern = `%${filters.q.toLowerCase()}%`;
-    values.push(pattern, pattern, pattern);
+    values.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern);
   }
   if (filters.categories?.length) {
     conditions.push(`category IN (${filters.categories.map(() => "?").join(", ")})`);
@@ -71,7 +90,13 @@ export function listEvents(filters = {}) {
   }
 
   return getDb()
-    .prepare(`SELECT * FROM events WHERE ${conditions.join(" AND ")}`)
+    .prepare(`
+      SELECT events.*
+      FROM events
+      LEFT JOIN venues ON venues.id = events.venue_id
+      LEFT JOIN neighborhoods ON neighborhoods.id = events.neighborhood_id
+      WHERE ${conditions.join(" AND ")}
+    `)
     .all(...values)
     .map(mapEvent);
 }

@@ -12,17 +12,32 @@ import { categoryOptions, laneCards, mapBackendCard, neighborhoodOptions } from 
 import { ensurePrimaryPlan } from "@/lib/plans";
 import type { EventCard as EventCardType, EventFilters } from "@/lib/types";
 
-const initialFilters: EventFilters = {
-  q: "",
-  date: "",
-  category: "any",
-  price: "any",
-  neighborhood: "any",
-  sort: "recommended",
-};
+function toDateInputValue(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function buildInitialFilters(): EventFilters {
+  const today = new Date();
+  const weekEnd = new Date(today);
+  weekEnd.setDate(today.getDate() + 6);
+
+  return {
+    q: "",
+    date: "",
+    startDate: toDateInputValue(today),
+    endDate: toDateInputValue(weekEnd),
+    category: "any",
+    price: "any",
+    neighborhood: "any",
+    sort: "recommended",
+  };
+}
 
 export default function DiscoverPage() {
-  const [filters, setFilters] = useState<EventFilters>(initialFilters);
+  const [filters, setFilters] = useState<EventFilters>(() => buildInitialFilters());
   const [cards, setCards] = useState<EventCardType[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<Array<{ slug: string; name: string }>>([]);

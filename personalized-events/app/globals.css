@@ -454,6 +454,14 @@ h3 {
   gap: 7px;
 }
 
+.toolbar .field:first-child {
+  flex: 1 1 220px;
+}
+
+.field-action .button {
+  min-height: 42px;
+}
+
 .field label,
 .field span {
   color: var(--muted);

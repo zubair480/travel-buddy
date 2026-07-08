@@ -10,11 +10,38 @@ interface FilterBarProps {
 }
 
 export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onChange }: FilterBarProps) {
+  function updateDateRange(patch: Partial<Pick<EventFilters, "startDate" | "endDate">>) {
+    onChange({ ...filters, date: "", ...patch });
+  }
+
+  function resetToThisWeek() {
+    const today = new Date();
+    const weekEnd = new Date(today);
+    weekEnd.setDate(today.getDate() + 6);
+    const format = (date: Date) =>
+      `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    onChange({ ...filters, date: "", startDate: format(today), endDate: format(weekEnd) });
+  }
+
   return (
     <section className="toolbar" aria-label="Event filters">
       <div className="field">
-        <label htmlFor="date">Date</label>
-        <input id="date" type="date" value={filters.date} onChange={(event) => onChange({ ...filters, date: event.target.value })} />
+        <label htmlFor="search">Search</label>
+        <input
+          id="search"
+          type="search"
+          placeholder="AI, hiring, jazz, venue..."
+          value={filters.q ?? ""}
+          onChange={(event) => onChange({ ...filters, q: event.target.value })}
+        />
+      </div>
+      <div className="field">
+        <label htmlFor="start-date">From</label>
+        <input id="start-date" type="date" value={filters.startDate ?? filters.date ?? ""} onChange={(event) => updateDateRange({ startDate: event.target.value })} />
+      </div>
+      <div className="field">
+        <label htmlFor="end-date">To</label>
+        <input id="end-date" type="date" value={filters.endDate ?? filters.date ?? ""} onChange={(event) => updateDateRange({ endDate: event.target.value })} />
       </div>
       <div className="field">
         <label htmlFor="category">Category</label>
@@ -53,6 +80,12 @@ export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onCha
           <option value="soonest">Soonest</option>
           <option value="price-low">Lowest price</option>
         </select>
+      </div>
+      <div className="field field-action">
+        <label aria-hidden="true">&nbsp;</label>
+        <button className="button secondary" type="button" onClick={resetToThisWeek}>
+          This week
+        </button>
       </div>
     </section>
   );

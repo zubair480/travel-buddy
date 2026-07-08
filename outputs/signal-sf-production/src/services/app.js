@@ -89,6 +89,8 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
       : [];
   const events = listEvents({
     date: filters.date,
+    startDate: filters.startDate,
+    endDate: filters.endDate,
     q: filters.q,
     categories: filters.categories,
     neighborhoodIds: filteredNeighborhoodIds,
