@@ -49,6 +49,38 @@ function buildConflictMap(plan: OneDayPlan | null) {
   return conflictMap;
 }
 
+function buildPlannerRoutePreview(plan: OneDayPlan | null) {
+  if (!plan) return null;
+
+  const stops = plan.items
+    .map((item) => ({
+      id: item.id,
+      title: item.event.title,
+      venueName: item.event.venueName,
+      address: item.event.address,
+    }))
+    .filter((item) => item.venueName || item.address);
+
+  if (stops.length < 2) return null;
+
+  const toStopLabel = (stop: (typeof stops)[number]) => {
+    const address = stop.address?.trim();
+    if (address && address.toLowerCase() !== "address tba") return `${stop.venueName}, ${address}`;
+    return `${stop.venueName}, San Francisco`;
+  };
+
+  const origin = toStopLabel(stops[0]);
+  const destination = toStopLabel(stops[stops.length - 1]);
+  const waypointLabels = stops.slice(1, -1).map(toStopLabel);
+  const waypointQuery = waypointLabels.length ? `&waypoints=${encodeURIComponent(waypointLabels.join("|"))}` : "";
+
+  return {
+    stops,
+    directionsUrl: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointQuery}&travelmode=transit`,
+    embedUrl: `https://maps.google.com/maps?output=embed&saddr=${encodeURIComponent(origin)}&daddr=${encodeURIComponent(destination)}${waypointQuery}`,
+  };
+}
+
 export default function PlannerPage() {
   const { data, error, isLoading, setData, refresh } = useApiResource<OneDayPlan[]>(async () => (await api.plans()).map(toPlan), []);
   const [selectedPlanId, setSelectedPlanId] = useState("");
@@ -61,6 +93,7 @@ export default function PlannerPage() {
   const plans = data ?? [];
   const activePlan = useMemo(() => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null, [plans, selectedPlanId]);
   const conflictMap = useMemo(() => buildConflictMap(activePlan), [activePlan]);
+  const routePreview = useMemo(() => buildPlannerRoutePreview(activePlan), [activePlan]);
   const detailedWarnings = useMemo(
     () =>
       (activePlan?.warnings ?? []).map((warning) => {
@@ -95,7 +128,7 @@ export default function PlannerPage() {
     setActionError("");
     try {
       const nextPlan = toPlan(await api.removePlanItem(activePlan.id, itemId));
-      setData(plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+      setData((current) => (current ?? []).map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "Could not remove event from plan.");
     } finally {
@@ -112,17 +145,18 @@ export default function PlannerPage() {
     const nextItems = [...activePlan.items];
     const [item] = nextItems.splice(index, 1);
     nextItems.splice(nextIndex, 0, item);
+    const previousPlans = plans;
 
     const optimisticPlan = { ...activePlan, items: nextItems };
-    setData(plans.map((plan) => (plan.id === activePlan.id ? optimisticPlan : plan)));
+    setData((current) => (current ?? []).map((plan) => (plan.id === activePlan.id ? optimisticPlan : plan)));
     setPendingItemId(itemId);
     setActionError("");
 
     try {
       const nextPlan = toPlan(await api.reorderPlanItems(activePlan.id, nextItems.map((planItem) => planItem.id)));
-      setData(plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+      setData((current) => (current ?? []).map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
     } catch (caught) {
-      setData(plans);
+      setData(previousPlans);
       setActionError(caught instanceof Error ? caught.message : "Could not reorder plan.");
     } finally {
       setPendingItemId("");
@@ -171,6 +205,37 @@ export default function PlannerPage() {
                   );
                 })}
               </div>
+            ) : null}
+
+            {routePreview ? (
+              <section className="route-preview" aria-label="Planner route map">
+                <div className="route-preview-head">
+                  <div>
+                    <p className="eyebrow">Planner route</p>
+                    <h3>
+                      {routePreview.stops[0]?.venueName} to {routePreview.stops[routePreview.stops.length - 1]?.venueName}
+                    </h3>
+                    <p className="subtle">This route is generated from the events currently in your plan, in planner order.</p>
+                  </div>
+                  <Link className="button secondary" href={routePreview.directionsUrl} target="_blank" rel="noreferrer">
+                    Open in Maps
+                  </Link>
+                </div>
+                <div className="route-preview-grid">
+                  <div className="route-stops">
+                    {routePreview.stops.map((stop, index) => (
+                      <div className="route-stop" key={stop.id}>
+                        <strong>{index + 1}. {stop.title}</strong>
+                        <span>{stop.venueName}</span>
+                        <span>{stop.address || "San Francisco"}</span>
+                      </div>
+                    ))}
+                  </div>
+                  <div className="route-map-frame">
+                    <iframe title="Planner route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                  </div>
+                </div>
+              </section>
             ) : null}
 
             <section className="section planner-board">
