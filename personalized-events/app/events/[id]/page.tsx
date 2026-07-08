@@ -2,107 +2,155 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { useState } from "react";
 import { AppShell } from "@/components/AppShell";
 import { EventCard } from "@/components/EventCard";
-import { EmptyState } from "@/components/StateBlocks";
-import { getEventById, getRelatedEvents } from "@/lib/catalog";
+import { RequireAuth } from "@/components/RequireAuth";
+import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
+import { api } from "@/lib/api";
+import { toEventCard, toPlan } from "@/lib/adapters";
+import type { BackendEventCard } from "@/lib/backend-types";
+import type { EventCard as EventCardType, OneDayPlan } from "@/lib/types";
 import { formatDateTime, formatTimeRange } from "@/lib/format";
-import type { OneDayPlan } from "@/lib/types";
-import { useLocalState } from "@/hooks/useLocalState";
+import { useApiResource } from "@/hooks/useApiResource";
 
-const initialPlan: OneDayPlan = {
-  id: "saturday-plan",
-  date: "2026-07-11",
-  title: "Saturday in SF",
-  items: []
-};
+function isBackendEventCard(value: unknown): value is BackendEventCard {
+  return Boolean(value && typeof value === "object" && "event" in value && "recommendation" in value);
+}
+
+async function ensurePlan() {
+  const plans = (await api.plans()).map(toPlan);
+  if (plans[0]) return plans[0];
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  await api.createPlan({ title: "Event detail plan", planDate: date.toISOString().slice(0, 10), notes: "Created from an event detail page." });
+  return (await api.plans()).map(toPlan)[0];
+}
 
 export default function EventDetailPage() {
   const params = useParams<{ id: string }>();
-  const event = getEventById(params.id);
-  const [savedIds, setSavedIds] = useLocalState<string[]>("fogline-saved", []);
-  const [plan, setPlan] = useLocalState<OneDayPlan>("fogline-plan", initialPlan);
+  const [event, setEvent] = useState<EventCardType | null>(null);
+  const [related, setRelated] = useState<EventCardType[]>([]);
+  const [actionError, setActionError] = useState("");
+  const [isSaving, setIsSaving] = useState(false);
+  const [isAdding, setIsAdding] = useState(false);
 
-  if (!event) {
-    return (
-      <AppShell>
-        <EmptyState title="Event not found" body="This event may have expired or moved." />
-      </AppShell>
-    );
-  }
+  const { error, isLoading, refresh } = useApiResource(
+    async () => {
+      const payload = await api.eventDetail(params.id);
+      const nextEvent = toEventCard(payload.data);
+      setEvent(nextEvent);
+      setRelated((payload.related ?? []).filter(isBackendEventCard).map(toEventCard));
+      return payload;
+    },
+    [params.id],
+  );
 
-  const related = getRelatedEvents(event);
-  const isSaved = savedIds.includes(event.id);
-
-  const toggleSaved = () => {
-    setSavedIds(isSaved ? savedIds.filter((id) => id !== event.id) : [...savedIds, event.id]);
+  const toggleSaved = async () => {
+    if (!event) return;
+    const wasSaved = event.isSaved;
+    setIsSaving(true);
+    setActionError("");
+    setEvent({ ...event, isSaved: !wasSaved });
+    try {
+      if (wasSaved) await api.unsaveEvent(event.id);
+      else await api.saveEvent(event.id);
+    } catch (caught) {
+      setEvent({ ...event, isSaved: wasSaved });
+      setActionError(caught instanceof Error ? caught.message : "Could not update saved state.");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const addToPlan = () => {
-    if (!plan.items.some((item) => item.eventId === event.id)) {
-      setPlan({ ...plan, items: [...plan.items, { eventId: event.id }] });
-    }
-    if (!isSaved) {
-      setSavedIds([...savedIds, event.id]);
+  const addToPlan = async () => {
+    if (!event) return;
+    setIsAdding(true);
+    setActionError("");
+    try {
+      const plan: OneDayPlan = await ensurePlan();
+      await api.addPlanItem(plan.id, event.id);
+      setEvent({ ...event, isSaved: true });
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not add this event to your plan.");
+    } finally {
+      setIsAdding(false);
     }
   };
 
   return (
     <AppShell>
-      <section className="detail-hero" style={{ backgroundImage: `url(${event.imageUrl})` }}>
-        <div className="detail-hero-overlay">
-          <div>
-            <p className="eyebrow">{event.neighborhood}</p>
-            <h1>{event.title}</h1>
-            <p>{formatDateTime(event.startsAt)} at {event.venueName}</p>
-          </div>
-        </div>
-      </section>
+      <RequireAuth>
+        {isLoading ? <LoadingState label="Loading event details..." /> : null}
+        {error ? <ErrorState label={error} action={<button className="button secondary" onClick={refresh}>Retry</button>} /> : null}
+        {actionError ? <ErrorState label={actionError} /> : null}
+        {!isLoading && !error && !event ? <EmptyState title="Event not found" body="This event may have expired or moved." /> : null}
 
-      <section className="split section">
-        <div>
-          <p className="lead">{event.summary}</p>
-          <p className="subtle">{event.description}</p>
-          <div className="why">
-            <strong>{event.recommendation.label}.</strong> {event.recommendation.detail}
-          </div>
-          <div className="section">
-            <h2>Related picks</h2>
-            <div className="grid two">
-              {related.map((relatedEvent) => (
-                <EventCard key={relatedEvent.id} event={relatedEvent} />
-              ))}
-            </div>
-          </div>
-        </div>
-        <aside className="panel">
-          <h3>Plan details</h3>
-          <div className="meta">
-            <span>{formatTimeRange(event.startsAt, event.endsAt)}</span>
-            <span>{event.priceLabel}</span>
-            <span>{event.category}</span>
-          </div>
-          <p className="subtle">{event.address}</p>
-          <div className="pill-row">
-            {event.tags.map((tag) => (
-              <span className="chip" key={tag}>{tag}</span>
-            ))}
-          </div>
-          {event.transitNotes ? <p className="subtle">{event.transitNotes}</p> : null}
-          {event.accessibilityNotes ? <p className="subtle">{event.accessibilityNotes}</p> : null}
-          <div className="actions">
-            <button className="button secondary" type="button" onClick={toggleSaved}>
-              {isSaved ? "Saved" : "Save"}
-            </button>
-            <button className="button" type="button" onClick={addToPlan}>
-              Add to plan
-            </button>
-          </div>
-          <Link className="button secondary" href={event.sourceUrl}>
-            Event source
-          </Link>
-        </aside>
-      </section>
+        {event ? (
+          <>
+            <section className="detail-hero" style={{ backgroundImage: `url(${event.imageUrl})` }}>
+              <div className="detail-hero-overlay">
+                <div>
+                  <p className="eyebrow">{event.neighborhood}</p>
+                  <h1>{event.title}</h1>
+                  <p>{formatDateTime(event.startsAt)} at {event.venueName}</p>
+                </div>
+              </div>
+            </section>
+
+            <section className="split section">
+              <div>
+                <p className="lead">{event.summary}</p>
+                <p className="subtle">{event.recommendation.detail}</p>
+                <div className="why">
+                  <strong>{event.recommendation.label}.</strong> Match score {event.recommendation.score.toFixed(2)}
+                </div>
+                <div className="section">
+                  <h2>Related picks</h2>
+                  {related.length ? (
+                    <div className="grid two">
+                      {related.map((relatedEvent) => (
+                        <EventCard key={relatedEvent.id} event={relatedEvent} />
+                      ))}
+                    </div>
+                  ) : (
+                    <EmptyState title="Related events pending" body="The backend detail endpoint needs to return full related event cards before this lane can render reliably." />
+                  )}
+                </div>
+              </div>
+              <aside className="panel sticky-panel">
+                <h3>Plan details</h3>
+                <div className="meta">
+                  <span>{formatTimeRange(event.startsAt, event.endsAt)}</span>
+                  <span>{event.priceLabel}</span>
+                  <span>{event.category}</span>
+                </div>
+                <p className="subtle">{event.address}</p>
+                <div className="pill-row">
+                  {event.tags.map((tag) => (
+                    <span className="chip" key={tag}>{tag}</span>
+                  ))}
+                </div>
+                <div className="actions">
+                  <button className="button secondary" type="button" onClick={toggleSaved} disabled={isSaving}>
+                    {isSaving ? "Saving..." : event.isSaved ? "Saved" : "Save"}
+                  </button>
+                  <button className="button" type="button" onClick={addToPlan} disabled={isAdding}>
+                    {isAdding ? "Adding..." : "Add to plan"}
+                  </button>
+                </div>
+                {event.sourceUrl ? (
+                  <Link className="button secondary" href={event.sourceUrl} target="_blank" rel="noreferrer">
+                    Event source
+                  </Link>
+                ) : (
+                  <p className="subtle">No source URL is available yet.</p>
+                )}
+              </aside>
+            </section>
+          </>
+        ) : null}
+      </RequireAuth>
     </AppShell>
   );
 }

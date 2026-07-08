@@ -1,98 +1,172 @@
 "use client";
 
 import Link from "next/link";
+import { FormEvent, useMemo, useState } from "react";
 import { AppShell } from "@/components/AppShell";
-import { EmptyState, LoadingState } from "@/components/StateBlocks";
-import { getEventById, getPlannerWarnings } from "@/lib/catalog";
+import { RequireAuth } from "@/components/RequireAuth";
+import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
+import { api } from "@/lib/api";
+import { toPlan } from "@/lib/adapters";
 import { formatTimeRange } from "@/lib/format";
 import type { OneDayPlan } from "@/lib/types";
-import { useLocalState } from "@/hooks/useLocalState";
+import { useApiResource } from "@/hooks/useApiResource";
 
-const initialPlan: OneDayPlan = {
-  id: "saturday-plan",
-  date: "2026-07-11",
-  title: "Saturday in SF",
-  items: []
-};
+function tomorrow() {
+  const date = new Date();
+  date.setDate(date.getDate() + 1);
+  return date.toISOString().slice(0, 10);
+}
 
 export default function PlannerPage() {
-  const [plan, setPlan, ready] = useLocalState<OneDayPlan>("fogline-plan", initialPlan);
-  const plannedEvents = plan.items.map((item) => getEventById(item.eventId)).filter(Boolean);
-  const warnings = getPlannerWarnings(plan);
+  const { data, error, isLoading, setData, refresh } = useApiResource<OneDayPlan[]>(async () => (await api.plans()).map(toPlan), []);
+  const [selectedPlanId, setSelectedPlanId] = useState("");
+  const [title, setTitle] = useState("SF day plan");
+  const [planDate, setPlanDate] = useState(tomorrow());
+  const [actionError, setActionError] = useState("");
+  const [isCreating, setIsCreating] = useState(false);
+  const [pendingItemId, setPendingItemId] = useState("");
 
-  const remove = (id: string) => {
-    setPlan({ ...plan, items: plan.items.filter((item) => item.eventId !== id) });
+  const plans = data ?? [];
+  const activePlan = useMemo(() => plans.find((plan) => plan.id === selectedPlanId) ?? plans[0] ?? null, [plans, selectedPlanId]);
+
+  const createPlan = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsCreating(true);
+    setActionError("");
+    try {
+      await api.createPlan({ title, planDate, notes: "Created from Planner." });
+      const nextPlans = (await api.plans()).map(toPlan);
+      setData(nextPlans);
+      setSelectedPlanId(nextPlans[0]?.id ?? "");
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not create plan.");
+    } finally {
+      setIsCreating(false);
+    }
   };
 
-  const move = (id: string, direction: -1 | 1) => {
-    const index = plan.items.findIndex((item) => item.eventId === id);
+  const remove = async (itemId: string) => {
+    if (!activePlan) return;
+    setPendingItemId(itemId);
+    setActionError("");
+    try {
+      const nextPlan = toPlan(await api.removePlanItem(activePlan.id, itemId));
+      setData(plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "Could not remove event from plan.");
+    } finally {
+      setPendingItemId("");
+    }
+  };
+
+  const move = async (itemId: string, direction: -1 | 1) => {
+    if (!activePlan) return;
+    const index = activePlan.items.findIndex((item) => item.id === itemId);
     const nextIndex = index + direction;
-    if (index < 0 || nextIndex < 0 || nextIndex >= plan.items.length) return;
-    const nextItems = [...plan.items];
+    if (index < 0 || nextIndex < 0 || nextIndex >= activePlan.items.length) return;
+    const nextItems = [...activePlan.items];
     const [item] = nextItems.splice(index, 1);
     nextItems.splice(nextIndex, 0, item);
-    setPlan({ ...plan, items: nextItems });
+    const optimisticPlan = { ...activePlan, items: nextItems };
+    setData(plans.map((plan) => (plan.id === activePlan.id ? optimisticPlan : plan)));
+    setPendingItemId(itemId);
+    setActionError("");
+    try {
+      const nextPlan = toPlan(await api.reorderPlanItems(activePlan.id, nextItems.map((planItem) => planItem.id)));
+      setData(plans.map((plan) => (plan.id === nextPlan.id ? nextPlan : plan)));
+    } catch (caught) {
+      setData(plans);
+      setActionError(caught instanceof Error ? caught.message : "Could not reorder plan.");
+    } finally {
+      setPendingItemId("");
+    }
   };
 
   return (
     <AppShell>
-      <section className="split">
-        <div>
-          <p className="eyebrow">One-day planner</p>
-          <h1>{plan.title}</h1>
-          <p className="lead">A lightweight timeline for turning saved picks into a realistic Saturday, with just enough warnings to avoid bad plans.</p>
+      <RequireAuth>
+        <section className="split">
+          <div>
+            <p className="eyebrow">One-day planner</p>
+            <h1>{activePlan?.title ?? "Build an SF day plan"}</h1>
+            <p className="lead">Backend itineraries now own the timeline, warnings, item order, and removals.</p>
 
-          {warnings.length > 0 ? (
-            <div className="grid">
-              {warnings.map((warning) => (
-                <div className="warning" key={warning.id}>{warning.message}</div>
-              ))}
-            </div>
-          ) : null}
+            {plans.length > 1 ? (
+              <label className="field compact-field">
+                <span>Plan</span>
+                <select value={activePlan?.id ?? ""} onChange={(event) => setSelectedPlanId(event.target.value)}>
+                  {plans.map((plan) => (
+                    <option key={plan.id} value={plan.id}>{plan.title} · {plan.date}</option>
+                  ))}
+                </select>
+              </label>
+            ) : null}
 
-          <section className="section planner-board">
-            {!ready ? (
-              <LoadingState label="Loading your plan..." />
-            ) : plannedEvents.length === 0 ? (
-              <EmptyState title="Your timeline is empty" body="Add events from Discover or Saved to start shaping the day." />
-            ) : (
-              plannedEvents.map((event) => (
-                <article className="timeline-item" key={event!.id}>
-                  <div className="timeline-time">{formatTimeRange(event!.startsAt, event!.endsAt)}</div>
+            {error ? <ErrorState label={error} action={<button className="button secondary" onClick={refresh}>Retry</button>} /> : null}
+            {actionError ? <ErrorState label={actionError} /> : null}
+            {isLoading ? <LoadingState label="Loading your plans..." /> : null}
+
+            {activePlan?.warnings.length ? (
+              <div className="grid">
+                {activePlan.warnings.map((warning) => (
+                  <div className="warning" key={warning.id}>{warning.message}</div>
+                ))}
+              </div>
+            ) : null}
+
+            <section className="section planner-board">
+              {!isLoading && !activePlan ? (
+                <EmptyState title="No plan yet" body="Create a plan here, or add an event from Discover and one will be created for you." />
+              ) : null}
+              {activePlan && activePlan.items.length === 0 ? (
+                <EmptyState title="Your timeline is empty" body="Add events from Discover or Saved to start shaping the day." action={<Link className="button secondary" href="/discover">Find events</Link>} />
+              ) : null}
+              {activePlan?.items.map((item) => (
+                <article className="timeline-item" key={item.id}>
+                  <div className="timeline-time">{formatTimeRange(item.startAtOverride ?? item.event.startsAt, item.endAtOverride ?? item.event.endsAt)}</div>
                   <div>
-                    <h3>{event!.title}</h3>
-                    <p className="subtle">{event!.venueName} in {event!.neighborhood}</p>
-                    <div className="why">{event!.recommendation.label}</div>
+                    <h3>{item.event.title}</h3>
+                    <p className="subtle">{item.event.venueName} in {item.event.neighborhood}</p>
+                    <div className="why">{item.event.recommendation.label}</div>
                   </div>
                   <div className="actions">
-                    <button className="button secondary" type="button" onClick={() => move(event!.id, -1)} aria-label={`Move ${event!.title} earlier`}>
+                    <button className="button secondary" type="button" onClick={() => move(item.id, -1)} disabled={pendingItemId === item.id}>
                       Up
                     </button>
-                    <button className="button secondary" type="button" onClick={() => move(event!.id, 1)} aria-label={`Move ${event!.title} later`}>
+                    <button className="button secondary" type="button" onClick={() => move(item.id, 1)} disabled={pendingItemId === item.id}>
                       Down
                     </button>
-                    <button className="button danger" type="button" onClick={() => remove(event!.id)}>
-                      Remove
+                    <button className="button danger" type="button" onClick={() => remove(item.id)} disabled={pendingItemId === item.id}>
+                      {pendingItemId === item.id ? "Working..." : "Remove"}
                     </button>
                   </div>
                 </article>
-              ))
-            )}
-          </section>
-        </div>
-        <aside className="panel">
-          <h3>Planner model</h3>
-          <p className="subtle">MVP keeps planning concrete: one date, saved events, timeline order, overlap checks, and travel-gap warnings between neighborhoods.</p>
-          <div className="actions">
-            <Link className="button" href="/saved">
-              Add saved events
-            </Link>
-            <Link className="button secondary" href="/discover">
-              Find more
-            </Link>
+              ))}
+            </section>
           </div>
-        </aside>
-      </section>
+          <aside className="panel sticky-panel">
+            <h3>Create a plan</h3>
+            <p className="subtle">Multiple plans are supported by the backend; use one per date or trip intent.</p>
+            <form className="form-stack compact-stack" onSubmit={createPlan}>
+              <label className="field">
+                <span>Title</span>
+                <input value={title} onChange={(event) => setTitle(event.target.value)} />
+              </label>
+              <label className="field">
+                <span>Date</span>
+                <input type="date" value={planDate} onChange={(event) => setPlanDate(event.target.value)} />
+              </label>
+              <button className="button" type="submit" disabled={isCreating || !title.trim() || !planDate}>
+                {isCreating ? "Creating..." : "Create plan"}
+              </button>
+            </form>
+            <div className="actions">
+              <Link className="button secondary" href="/saved">Add saved events</Link>
+              <Link className="button secondary" href="/discover">Find more</Link>
+            </div>
+          </aside>
+        </section>
+      </RequireAuth>
     </AppShell>
   );
 }

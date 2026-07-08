@@ -35,7 +35,8 @@ a {
 
 button,
 input,
-select {
+select,
+textarea {
   font: inherit;
 }
 
@@ -101,6 +102,22 @@ button {
 .nav a:hover {
   background: rgba(31, 93, 84, 0.08);
   color: var(--ink);
+}
+
+.session-nav {
+  align-items: center;
+  color: var(--muted);
+  display: flex;
+  font-size: 14px;
+  gap: 10px;
+}
+
+.link-button {
+  background: transparent;
+  border: 0;
+  color: var(--cypress-dark);
+  font-weight: 800;
+  padding: 8px;
 }
 
 .page {
@@ -192,6 +209,17 @@ h3 {
 .button.danger {
   background: var(--poppy);
   border-color: var(--poppy);
+}
+
+.button.compact {
+  min-height: 38px;
+  padding: 0 14px;
+}
+
+.button:disabled,
+.link-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
 }
 
 .section {
@@ -327,12 +355,34 @@ h3 {
 }
 
 .field input,
-.field select {
+.field select,
+.field textarea {
   background: white;
   border: 1px solid var(--line);
   border-radius: 8px;
   min-height: 42px;
   padding: 0 12px;
+}
+
+.field textarea {
+  line-height: 1.5;
+  padding: 12px;
+  resize: vertical;
+}
+
+.field span {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.field.grow {
+  flex: 1 1 240px;
+}
+
+.compact-field {
+  max-width: 360px;
 }
 
 .split {
@@ -346,6 +396,92 @@ h3 {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 18px;
+}
+
+.sticky-panel {
+  align-self: start;
+  position: sticky;
+  top: 96px;
+}
+
+.auth-layout {
+  display: grid;
+  gap: 34px;
+  grid-template-columns: minmax(0, 0.95fr) minmax(320px, 0.55fr);
+  min-height: calc(100vh - 150px);
+  place-items: center stretch;
+}
+
+.auth-note {
+  max-width: 420px;
+}
+
+.form-panel,
+.form-stack {
+  display: grid;
+  gap: 18px;
+}
+
+.compact-stack {
+  gap: 12px;
+}
+
+.segmented {
+  background: rgba(31, 93, 84, 0.08);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  padding: 4px;
+}
+
+.segmented button {
+  background: transparent;
+  border: 0;
+  border-radius: 6px;
+  color: var(--muted);
+  font-weight: 800;
+  min-height: 38px;
+}
+
+.segmented button.selected {
+  background: white;
+  color: var(--ink);
+  box-shadow: 0 1px 10px rgba(31, 35, 32, 0.08);
+}
+
+.error.inline,
+.success.inline {
+  border-radius: 8px;
+  padding: 12px;
+  text-align: left;
+}
+
+.success.inline {
+  background: rgba(31, 93, 84, 0.1);
+  border: 1px solid rgba(31, 93, 84, 0.28);
+  color: var(--cypress-dark);
+}
+
+.lane-row {
+  display: grid;
+  gap: 12px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin: 0 0 20px;
+}
+
+.lane {
+  background: rgba(255, 253, 248, 0.88);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  display: flex;
+  justify-content: space-between;
+  padding: 14px 16px;
+}
+
+.lane strong {
+  color: var(--cypress-dark);
+  font-size: 24px;
 }
 
 .planner-board {
@@ -392,6 +528,10 @@ h3 {
 .onboarding {
   margin: 0 auto;
   max-width: 780px;
+}
+
+.onboarding.wide {
+  max-width: 960px;
 }
 
 .stepper {
@@ -452,14 +592,20 @@ h3 {
     padding-bottom: 2px;
   }
 
+  .session-nav {
+    width: 100%;
+  }
+
   .page {
     padding: 28px 16px 64px;
   }
 
   .hero,
   .split,
+  .auth-layout,
   .grid.two,
-  .grid.three {
+  .grid.three,
+  .lane-row {
     grid-template-columns: 1fr;
   }
 
@@ -474,6 +620,10 @@ h3 {
 
   .toolbar .field {
     width: 100%;
+  }
+
+  .sticky-panel {
+    position: static;
   }
 
   .timeline-item {

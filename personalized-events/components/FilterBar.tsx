@@ -1,30 +1,21 @@
 "use client";
 
-import type { EventCategory, EventFilters, Neighborhood } from "@/lib/types";
-
-const categories: Array<"any" | EventCategory> = ["any", "food", "outdoors", "music", "arts", "film", "markets", "wellness", "community"];
-const neighborhoods: Array<"any" | Neighborhood> = [
-  "any",
-  "Mission",
-  "Hayes Valley",
-  "Richmond",
-  "Sunset",
-  "North Beach",
-  "SoMa",
-  "Embarcadero",
-  "Golden Gate Park",
-  "Dogpatch",
-  "Marina"
-];
+import type { EventFilters, NeighborhoodOption } from "@/lib/types";
 
 interface FilterBarProps {
   filters: EventFilters;
   onChange: (filters: EventFilters) => void;
+  categories: string[];
+  neighborhoods: NeighborhoodOption[];
 }
 
-export function FilterBar({ filters, onChange }: FilterBarProps) {
+export function FilterBar({ filters, onChange, categories, neighborhoods }: FilterBarProps) {
   return (
     <section className="toolbar" aria-label="Event filters">
+      <div className="field grow">
+        <label htmlFor="q">Search</label>
+        <input id="q" placeholder="AI, design, jazz, founder..." value={filters.q} onChange={(event) => onChange({ ...filters, q: event.target.value })} />
+      </div>
       <div className="field">
         <label htmlFor="date">Date</label>
         <select id="date" value={filters.date} onChange={(event) => onChange({ ...filters, date: event.target.value as EventFilters["date"] })}>
@@ -37,7 +28,7 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
       <div className="field">
         <label htmlFor="category">Category</label>
         <select id="category" value={filters.category} onChange={(event) => onChange({ ...filters, category: event.target.value as EventFilters["category"] })}>
-          {categories.map((category) => (
+          {["any", ...categories].map((category) => (
             <option key={category} value={category}>
               {category === "any" ? "Any category" : category}
             </option>
@@ -57,9 +48,10 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
       <div className="field">
         <label htmlFor="neighborhood">Neighborhood</label>
         <select id="neighborhood" value={filters.neighborhood} onChange={(event) => onChange({ ...filters, neighborhood: event.target.value as EventFilters["neighborhood"] })}>
+          <option value="any">Any neighborhood</option>
           {neighborhoods.map((neighborhood) => (
-            <option key={neighborhood} value={neighborhood}>
-              {neighborhood === "any" ? "Any neighborhood" : neighborhood}
+            <option key={neighborhood.slug} value={neighborhood.slug}>
+              {neighborhood.name}
             </option>
           ))}
         </select>
@@ -69,8 +61,8 @@ export function FilterBar({ filters, onChange }: FilterBarProps) {
         <select id="sort" value={filters.sort} onChange={(event) => onChange({ ...filters, sort: event.target.value as EventFilters["sort"] })}>
           <option value="recommended">Best match</option>
           <option value="soonest">Soonest</option>
+          <option value="popular">Popular</option>
           <option value="price-low">Lowest price</option>
-          <option value="neighborhood">Neighborhood</option>
         </select>
       </div>
     </section>

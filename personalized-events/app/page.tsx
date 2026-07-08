@@ -1,11 +1,7 @@
 import Link from "next/link";
 import { AppShell } from "@/components/AppShell";
-import { EventCard } from "@/components/EventCard";
-import { getEventCards } from "@/lib/catalog";
 
 export default function LandingPage() {
-  const picks = getEventCards().slice(0, 3);
-
   return (
     <AppShell>
       <section className="hero">
@@ -26,19 +22,19 @@ export default function LandingPage() {
         </div>
         <div className="panel">
           <p className="eyebrow">MVP flow</p>
-          <h2>From maybe to Saturday.</h2>
+          <h2>From context to a workable SF day.</h2>
           <div className="grid">
             <div>
-              <h3>1. Tune the vibe</h3>
-              <p className="subtle">Pick interests, neighborhoods, budget, time of day, and whether this is solo, a date, friends, or family.</p>
+              <h3>1. Share your context</h3>
+              <p className="subtle">Goals, stage, roles, skills, and networking intent shape the recommendation graph.</p>
             </div>
             <div>
-              <h3>2. Save strong picks</h3>
-              <p className="subtle">Every card explains why it is shown so the feed feels personal, not random.</p>
+              <h3>2. Review ranked lanes</h3>
+              <p className="subtle">Backend-powered event cards explain why each pick fits instead of behaving like a static catalog.</p>
             </div>
             <div>
               <h3>3. Build one day</h3>
-              <p className="subtle">Drop saved events into a timeline and get lightweight conflict and travel warnings.</p>
+              <p className="subtle">Saved events become a real itinerary with warnings for overlaps and tight travel gaps.</p>
             </div>
           </div>
         </div>
@@ -47,17 +43,26 @@ export default function LandingPage() {
       <section className="section">
         <div className="section-header">
           <div>
-            <p className="eyebrow">Editorial feed preview</p>
-            <h2>Local, curated, scannable.</h2>
+            <p className="eyebrow">Integration pass</p>
+            <h2>Backend truth, editorial surface.</h2>
           </div>
           <Link className="button secondary" href="/discover">
-            See all
+            Open Discover
           </Link>
         </div>
         <div className="grid three">
-          {picks.map((event) => (
-            <EventCard key={event.id} event={event} />
-          ))}
+          <article className="card card-body">
+            <h3>Session-backed</h3>
+            <p className="subtle">Login, logout, profile, preferences, saved events, and plans flow through the backend session cookie.</p>
+          </article>
+          <article className="card card-body">
+            <h3>Profile-first</h3>
+            <p className="subtle">Onboarding collects the career and networking fields the recommender needs before discovery.</p>
+          </article>
+          <article className="card card-body">
+            <h3>Plan-ready</h3>
+            <p className="subtle">Discover, saved, detail, and planner pages share the same typed API client and UI adapters.</p>
+          </article>
         </div>
       </section>
     </AppShell>

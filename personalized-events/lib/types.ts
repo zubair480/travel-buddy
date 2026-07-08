@@ -1,34 +1,15 @@
-export type EventCategory =
-  | "food"
-  | "outdoors"
-  | "music"
-  | "arts"
-  | "film"
-  | "markets"
-  | "wellness"
-  | "community";
-
+export type EventCategory = string;
 export type BudgetLevel = "free" | "under25" | "under75" | "splurge";
-export type SocialContext = "solo" | "date" | "friends" | "family";
+export type SocialContext = "solo" | "date" | "friends" | "family" | "colleagues";
 export type TimeOfDay = "morning" | "afternoon" | "evening" | "late";
 export type PreferredDay = "weekday" | "friday" | "saturday" | "sunday";
-
-export type Neighborhood =
-  | "Mission"
-  | "Hayes Valley"
-  | "Richmond"
-  | "Sunset"
-  | "North Beach"
-  | "SoMa"
-  | "Embarcadero"
-  | "Golden Gate Park"
-  | "Dogpatch"
-  | "Marina";
+export type SortMode = "recommended" | "soonest" | "popular" | "price-low";
 
 export interface RecommendationReason {
   label: string;
   detail: string;
   matchedPreferences: string[];
+  score: number;
 }
 
 export interface EventCard {
@@ -40,51 +21,80 @@ export interface EventCard {
   endsAt: string;
   venueName: string;
   address: string;
-  neighborhood: Neighborhood;
+  neighborhood: string;
+  neighborhoodSlug: string;
   category: EventCategory;
   tags: string[];
   priceLabel: string;
   priceMin: number;
   priceMax: number;
   score: number;
+  isSaved: boolean;
+  sourceUrl?: string;
   recommendation: RecommendationReason;
 }
 
 export interface EventDetail extends EventCard {
   description: string;
-  organizerName: string;
-  sourceUrl: string;
+  organizerName?: string;
   accessibilityNotes?: string;
   transitNotes?: string;
-  relatedEventIds: string[];
+}
+
+export interface UserProfile {
+  userId: string;
+  onboardingCompleted: boolean;
+  primaryGoals: string[];
+  currentStage: string;
+  experienceLevel: string;
+  targetRoles: string[];
+  skills: string[];
+  networkingIntent: string;
+  preferredCompanyStage: string;
+  bio: string;
+  resumeText: string;
+  cityHint: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface UserPreferences {
+  userId?: string;
   interests: EventCategory[];
-  budget: BudgetLevel;
-  neighborhoods: Neighborhood[];
-  preferredDays: PreferredDay[];
-  timeOfDay: TimeOfDay[];
-  socialContext: SocialContext[];
+  dislikedCategories: EventCategory[];
+  preferredNeighborhoodSlugs: string[];
+  preferredDaysOfWeek: number[];
+  preferredDayParts: TimeOfDay[];
+  indoorPreference: "indoor" | "outdoor" | "mixed";
+  budgetMinCents: number;
+  budgetMaxCents: number;
+  maxTravelMinutes: number;
+  groupContext: string;
+  updatedAt?: string;
 }
 
 export interface EventFilters {
+  q: string;
   date: "any" | "today" | "tomorrow" | "weekend";
   category: "any" | EventCategory;
   price: "any" | BudgetLevel;
-  neighborhood: "any" | Neighborhood;
-  sort: "recommended" | "soonest" | "price-low" | "neighborhood";
+  neighborhood: "any" | string;
+  sort: SortMode;
 }
 
-export interface PlannerItem {
+export interface PlanItem {
+  id: string;
   eventId: string;
-  startOverride?: string;
-  notes?: string;
+  sortOrder: number;
+  startAtOverride?: string | null;
+  endAtOverride?: string | null;
+  notes?: string | null;
+  event: EventCard;
 }
 
 export interface PlannerWarning {
   id: string;
-  type: "overlap" | "travel";
+  type: "overlap" | "travel" | string;
   message: string;
   eventIds: string[];
 }
@@ -93,5 +103,13 @@ export interface OneDayPlan {
   id: string;
   date: string;
   title: string;
-  items: PlannerItem[];
+  notes?: string | null;
+  items: PlanItem[];
+  warnings: PlannerWarning[];
+}
+
+export interface NeighborhoodOption {
+  id: string;
+  slug: string;
+  name: string;
 }
