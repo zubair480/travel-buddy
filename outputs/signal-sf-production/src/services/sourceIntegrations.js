@@ -469,8 +469,8 @@ function eventLikeObjectToRecord(event, provider, sourceUrl) {
     category: inferCategory(`${title} ${description}`),
     tags: [provider, ...inferTags(`${title} ${description}`)],
     startAt,
-    endAt: firstString(event.endDate, event.endTime, event.endsAt, event.end_at) ?? null,
-    timezone: firstString(event.timezone, event.timeZone) ?? "America/Los_Angeles",
+    endAt: firstString(event.endDate, event.endTime, event.endsAt, event.end_at) || null,
+    timezone: firstString(event.timezone, event.timeZone) || "America/Los_Angeles",
     venueName: firstString(venue?.name, venue?.title, address) || `${PROVIDERS[provider]?.label ?? "SF"} venue TBA`,
     neighborhoodSlug: inferNeighborhoodSlug(`${venue?.name ?? ""} ${address ?? ""} ${description}`),
     imageUrl: Array.isArray(image) ? firstString(image[0]?.url, image[0]) : firstString(image?.url, image),
@@ -496,7 +496,9 @@ function readPriceText(offers, fallbackText) {
 function normalizeEventUrl(value, sourceUrl) {
   if (!value) return null;
   try {
-    return new URL(value, sourceUrl).toString();
+    const url = new URL(value, sourceUrl);
+    if (url.hostname === "luma.com") url.hostname = "lu.ma";
+    return url.toString();
   } catch {
     return String(value);
   }
@@ -531,17 +533,18 @@ function jsonLdEventToRecord(event, provider, sourceUrl) {
   const location = Array.isArray(event.location) ? event.location[0] : event.location;
   const address = typeof location?.address === "string" ? location.address : [location?.address?.streetAddress, location?.address?.addressLocality].filter(Boolean).join(", ");
   const offers = Array.isArray(event.offers) ? event.offers[0] : event.offers;
+  const source = normalizeEventUrl(event.url, sourceUrl);
   return {
     provider,
-    providerEventId: event.identifier?.value ?? event.url ?? `${provider}-${event.name}-${event.startDate}`,
-    sourceUrl: event.url ?? sourceUrl,
+    providerEventId: event.identifier?.value ?? source ?? `${provider}-${event.name}-${event.startDate}`,
+    sourceUrl: source ?? sourceUrl,
     title: event.name,
     description: stripHtml(event.description ?? ""),
     category: inferCategory(`${event.name} ${event.description ?? ""}`),
     tags: [provider, ...inferTags(`${event.name} ${event.description ?? ""}`)],
     startAt: event.startDate,
     endAt: event.endDate ?? null,
-    timezone: "America/Los_Angeles",
+    timezone: firstString(event.timezone, event.timeZone) || "America/Los_Angeles",
     venueName: location?.name ?? address ?? `${PROVIDERS[provider]?.label ?? "SF"} venue TBA`,
     neighborhoodSlug: inferNeighborhoodSlug(`${location?.name ?? ""} ${address}`),
     imageUrl: Array.isArray(event.image) ? event.image[0] : event.image,

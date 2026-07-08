@@ -108,3 +108,22 @@ test("parseEmbeddedEventJson extracts event-shaped records from rendered page da
   assert.equal(records[0].neighborhoodSlug, "soma");
   assert.equal(records[0].priceText, "Free");
 });
+
+test("parsers canonicalize luma.com event URLs to lu.ma", () => {
+  const jsonLdRecords = parseJsonLdEvents(
+    `<html><script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Event",
+        "name": "SF AI Night",
+        "startDate": "2026-07-18T18:00:00-07:00",
+        "url": "https://luma.com/ai-night"
+      }
+    </script></html>`,
+    "bright-data",
+    "https://luma.com/sf",
+  );
+
+  assert.equal(jsonLdRecords[0].providerEventId, "https://lu.ma/ai-night");
+  assert.equal(jsonLdRecords[0].sourceUrl, "https://lu.ma/ai-night");
+});
