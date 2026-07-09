@@ -1,6 +1,4 @@
 {
   "version": 2,
-  "projectSettings": {
-    "rootDirectory": "outputs/signal-sf-production"
-  }
+  "rootDirectory": "outputs/signal-sf-production"
 }
