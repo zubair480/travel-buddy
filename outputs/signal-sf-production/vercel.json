@@ -1,12 +1,6 @@
 {
   "version": 2,
-  "nodeVersion": "22.x",
   "buildCommand": "npm install",
-  "functions": {
-    "api/index.js": {
-      "maxDuration": 30
-    }
-  },
   "routes": [
     { "src": "/(.*)", "dest": "api/index.js" }
   ]
