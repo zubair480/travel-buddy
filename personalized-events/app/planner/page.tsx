@@ -9,6 +9,7 @@ import { useApiResource } from "@/hooks/useApiResource";
 import { api } from "@/lib/api";
 import { toPlan } from "@/lib/adapters";
 import { formatTimeRange } from "@/lib/format";
+import { osmEmbedUrl, toGeoPoint } from "@/lib/routeMap";
 import type { OneDayPlan } from "@/lib/types";
 
 function tomorrow() {
@@ -58,6 +59,7 @@ function buildPlannerRoutePreview(plan: OneDayPlan | null) {
       title: item.event.title,
       venueName: item.event.venueName,
       address: item.event.address,
+      point: toGeoPoint(item.event),
     }))
     .filter((item) => item.venueName || item.address);
 
@@ -74,10 +76,12 @@ function buildPlannerRoutePreview(plan: OneDayPlan | null) {
   const waypointLabels = stops.slice(1, -1).map(toStopLabel);
   const waypointQuery = waypointLabels.length ? `&waypoints=${encodeURIComponent(waypointLabels.join("|"))}` : "";
 
+  const points = stops.map((stop) => stop.point).filter((point): point is NonNullable<typeof point> => point !== null);
+
   return {
     stops,
     directionsUrl: `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}${waypointQuery}&travelmode=transit`,
-    embedUrl: `https://maps.google.com/maps?output=embed&saddr=${encodeURIComponent(origin)}&daddr=${encodeURIComponent(destination)}${waypointQuery}`,
+    embedUrl: osmEmbedUrl(points),
   };
 }
 
@@ -232,7 +236,14 @@ export default function PlannerPage() {
                     ))}
                   </div>
                   <div className="route-map-frame">
-                    <iframe title="Planner route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                    {/* key forces a fresh iframe when the route changes; a bare src
+                        update doesn't reliably re-navigate an already-loaded iframe,
+                        which is what left the map showing a stale route. */}
+                    {routePreview.embedUrl ? (
+                      <iframe key={routePreview.embedUrl} title="Planner route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                    ) : (
+                      <div className="route-map-empty subtle">Map preview unavailable for these venues. Use “Open in Maps” for directions.</div>
+                    )}
                   </div>
                 </div>
               </section>

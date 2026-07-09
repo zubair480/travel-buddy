@@ -99,6 +99,20 @@ const GOAL_CATEGORY_BOOSTS = {
   find_cofounder: ["tech", "community", "art"],
 };
 
+/**
+ * The union of event categories relevant to a user's primary goals. Used to
+ * isolate the discovery feed so, e.g., a job seeker only sees career-relevant
+ * events. Returns [] when the user has no goals (meaning: don't restrict).
+ */
+export function allowedCategoriesForGoals(goals) {
+  if (!goals?.length) return [];
+  const categories = new Set();
+  for (const goal of goals) {
+    for (const category of GOAL_CATEGORY_BOOSTS[goal] ?? []) categories.add(category);
+  }
+  return [...categories];
+}
+
 export function applyProfileGoalBoost(baseRecommendation, event, profile) {
   if (!profile || !profile.primaryGoals?.length) return baseRecommendation;
   const goalBoost = profile.primaryGoals.reduce((sum, goal) => {

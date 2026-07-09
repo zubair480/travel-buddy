@@ -35,6 +35,10 @@ export function mapBackendCard(card: BackendEventCard): EventCard {
     endsAt: card.event.endAt ?? card.event.startAt,
     venueName: card.venue?.name ?? "Venue TBA",
     address: [card.venue?.addressLine1, card.venue?.city].filter(Boolean).join(", "),
+    // Fall back to the neighborhood centroid when a venue has no coordinates
+    // (common for scraped/imported events) so the map still has a location to show.
+    latitude: card.venue?.latitude ?? card.neighborhood?.centroidLat ?? null,
+    longitude: card.venue?.longitude ?? card.neighborhood?.centroidLng ?? null,
     neighborhood: card.neighborhood?.name ?? "San Francisco",
     category: card.event.category,
     tags: card.event.tags,

@@ -10,6 +10,7 @@ import { EmptyState, ErrorState, LoadingState } from "@/components/StateBlocks";
 import { api } from "@/lib/api";
 import { categoryOptions, laneCards, mapBackendCard, neighborhoodOptions } from "@/lib/backend";
 import { ensurePrimaryPlan } from "@/lib/plans";
+import { osmEmbedUrl, toGeoPoint } from "@/lib/routeMap";
 import { PREFERENCES_UPDATED_EVENT, PROFILE_UPDATED_EVENT } from "@/lib/uiSignals";
 import type { EventCard as EventCardType, EventFilters } from "@/lib/types";
 
@@ -38,7 +39,12 @@ function buildInitialFilters(): EventFilters {
 }
 
 export default function DiscoverPage() {
-  const [filters, setFilters] = useState<EventFilters>(() => buildInitialFilters());
+  // `draftFilters` is what the FilterBar edits; `appliedFilters` is what actually
+  // drives the query. Nothing refetches until the user clicks "Apply filters", so
+  // editing the date range (or any field) no longer fights them mid-change.
+  const initialFilters = useMemo(() => buildInitialFilters(), []);
+  const [draftFilters, setDraftFilters] = useState<EventFilters>(initialFilters);
+  const [appliedFilters, setAppliedFilters] = useState<EventFilters>(initialFilters);
   const [cards, setCards] = useState<EventCardType[]>([]);
   const [categories, setCategories] = useState<string[]>([]);
   const [neighborhoods, setNeighborhoods] = useState<Array<{ slug: string; name: string }>>([]);
@@ -104,7 +110,7 @@ export default function DiscoverPage() {
       setIsRecommendationsLoading(true);
       setError("");
       try {
-        const recommendations = await api.recommendations(filters);
+        const recommendations = await api.recommendations(appliedFilters);
         if (active) setCards(recommendations.map(mapBackendCard));
       } catch (caught) {
         if (active) setError(caught instanceof Error ? caught.message : "Could not refresh recommendations.");
@@ -117,17 +123,23 @@ export default function DiscoverPage() {
     return () => {
       active = false;
     };
-  }, [filters, refreshNonce]);
+  }, [appliedFilters, refreshNonce]);
 
   const visibleCards = useMemo(() => {
-    if (filters.price === "any") return cards;
+    if (appliedFilters.price === "any") return cards;
     return cards.filter((event) => {
-      if (filters.price === "free") return event.priceMin === 0;
-      if (filters.price === "under25") return event.priceMin <= 25;
-      if (filters.price === "under75") return event.priceMin <= 75;
+      if (appliedFilters.price === "free") return event.priceMin === 0;
+      if (appliedFilters.price === "under25") return event.priceMin <= 25;
+      if (appliedFilters.price === "under75") return event.priceMin <= 75;
       return true;
     });
-  }, [cards, filters.price]);
+  }, [cards, appliedFilters.price]);
+
+  const filtersDirty = useMemo(
+    () => JSON.stringify(draftFilters) !== JSON.stringify(appliedFilters),
+    [draftFilters, appliedFilters],
+  );
+  const applyFilters = () => setAppliedFilters(draftFilters);
 
   const recommendedCount = useMemo(() => visibleCards.filter((event) => event.recommendation.score >= 0.55).length, [visibleCards]);
   const focusRatio = visibleCards.length ? Math.round((recommendedCount / visibleCards.length) * 100) : 0;
@@ -146,7 +158,8 @@ export default function DiscoverPage() {
     const origin = stopLabel(candidates[0]);
     const destination = stopLabel(candidates[1]);
     const directionsUrl = `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(origin)}&destination=${encodeURIComponent(destination)}&travelmode=transit`;
-    const embedUrl = `https://maps.google.com/maps?output=embed&saddr=${encodeURIComponent(origin)}&daddr=${encodeURIComponent(destination)}`;
+    const points = candidates.map((event) => toGeoPoint(event)).filter((point): point is NonNullable<typeof point> => point !== null);
+    const embedUrl = osmEmbedUrl(points);
 
     return {
       first: candidates[0],
@@ -301,10 +314,13 @@ export default function DiscoverPage() {
         {isLoading && cards.length === 0 ? <LoadingState label="Loading backend recommendations..." /> : null}
         {isLoading && cards.length > 0 ? <div className="loading inline">Refreshing recommendations from your latest profile...</div> : null}
         <FilterBar
-          filters={filters}
+          filters={draftFilters}
           categoryOptions={categoryOptions(categories)}
           neighborhoodOptions={neighborhoodOptions(neighborhoods)}
-          onChange={setFilters}
+          onChange={setDraftFilters}
+          onApply={applyFilters}
+          isDirty={filtersDirty}
+          isApplying={isRecommendationsLoading}
         />
 
         {routePreview ? (
@@ -334,7 +350,13 @@ export default function DiscoverPage() {
                 </div>
               </div>
               <div className="route-map-frame">
-                <iframe title="Event route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                {/* key forces a fresh iframe when the route changes so the map never
+                    lingers on a stale route after filters/ranking update. */}
+                {routePreview.embedUrl ? (
+                  <iframe key={routePreview.embedUrl} title="Event route map" src={routePreview.embedUrl} loading="lazy" referrerPolicy="no-referrer-when-downgrade" />
+                ) : (
+                  <div className="route-map-empty subtle">Map preview unavailable for these venues. Use “Open in Maps” for directions.</div>
+                )}
               </div>
             </div>
           </section>

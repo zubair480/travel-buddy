@@ -4,7 +4,7 @@ import { listSavedEventIds, saveEvent, unsaveEvent } from "../repositories/saved
 import { listFeedbackForUser, recordFeedback } from "../repositories/feedback.js";
 import { createPlan, createPlanItem, deletePlanItem, findPlanById, listItemsForPlan, listPlansForUser, reorderPlanItems, updatePlan } from "../repositories/itineraries.js";
 import { createId } from "../lib/security.js";
-import { applyProfileGoalBoost, scoreEvent } from "./recommendations.js";
+import { allowedCategoriesForGoals, applyProfileGoalBoost, scoreEvent } from "./recommendations.js";
 import { validatePlan } from "./planner.js";
 import { findProfileByUserId, upsertProfile } from "../repositories/profiles.js";
 
@@ -126,32 +126,18 @@ function deriveProfileInsights(profile) {
   };
 }
 
-function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
+/**
+ * Hydrates a raw event list into scored, deduped, sorted cards. Extracted so a
+ * single event can be turned into a card directly (see getEventDetail) without
+ * having to survive the dedupe of a larger, differently-filtered pool.
+ */
+function buildCardsFromEvents(userId, events, sort = "recommended") {
   const preferences = findPreferencesByUserId(userId);
   const profile = ensureProfile(userId);
   const feedback = listFeedbackForUser(userId);
   const savedIds = new Set(listSavedEventIds(userId));
-  const neighborhoods = listNeighborhoods();
-  const neighborhoodMap = mapById(neighborhoods);
-  const filteredNeighborhoodIds =
-    filters.neighborhoodSlugs?.length
-      ? neighborhoods.filter((item) => filters.neighborhoodSlugs.includes(item.slug)).map((item) => item.id)
-      : [];
-  const eventFilters = {
-    date: filters.date,
-    startDate: filters.startDate,
-    endDate: filters.endDate,
-    q: filters.q,
-    categories: filters.categories,
-    neighborhoodIds: filteredNeighborhoodIds,
-  };
-  const liveEvents = listEvents({
-    ...eventFilters,
-    excludeSourceProviders: ["seed"],
-  });
-  const events = liveEvents.length ? liveEvents : listEvents(eventFilters);
-  const venues = listVenuesByIds([...new Set(events.map((item) => item.venueId).filter(Boolean))]);
-  const venueMap = mapById(venues);
+  const neighborhoodMap = mapById(listNeighborhoods());
+  const venueMap = mapById(listVenuesByIds([...new Set(events.map((item) => item.venueId).filter(Boolean))]));
 
   const cards = dedupeEventCards(events.map((event) => {
     const neighborhood = neighborhoodMap.get(event.neighborhoodId) ?? null;
@@ -180,6 +166,28 @@ function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
   return cards;
 }
 
+function buildEventCards({ userId, filters = {}, sort = "recommended" }) {
+  const neighborhoods = listNeighborhoods();
+  const filteredNeighborhoodIds =
+    filters.neighborhoodSlugs?.length
+      ? neighborhoods.filter((item) => filters.neighborhoodSlugs.includes(item.slug)).map((item) => item.id)
+      : [];
+  const eventFilters = {
+    date: filters.date,
+    startDate: filters.startDate,
+    endDate: filters.endDate,
+    q: filters.q,
+    categories: filters.categories,
+    neighborhoodIds: filteredNeighborhoodIds,
+  };
+  const liveEvents = listEvents({
+    ...eventFilters,
+    excludeSourceProviders: ["seed"],
+  });
+  const events = liveEvents.length ? liveEvents : listEvents(eventFilters);
+  return buildCardsFromEvents(userId, events, sort);
+}
+
 export function getBootstrap(user) {
   const profile = ensureProfile(user.id);
   const cards = buildEventCards({ userId: user.id, sort: "recommended" });
@@ -197,8 +205,22 @@ export function getBootstrap(user) {
 }
 
 export function getRecommendations(userId, filters, sort, pagination) {
-  const cards = buildEventCards({ userId, filters, sort });
+  const cards = buildEventCards({ userId, filters: isolateByGoals(userId, filters), sort });
   return paginate(cards, pagination);
+}
+
+/**
+ * Restricts the discovery feed to the categories relevant to the user's primary
+ * goals (job seekers see career events, etc.). Only applies when the user hasn't
+ * already chosen an explicit category filter, and only when they have goals set;
+ * otherwise the feed is unchanged.
+ */
+function isolateByGoals(userId, filters = {}) {
+  if (filters.categories?.length) return filters;
+  const profile = ensureProfile(userId);
+  const goalCategories = allowedCategoriesForGoals(profile.primaryGoals);
+  if (!goalCategories.length) return filters;
+  return { ...filters, categories: goalCategories };
 }
 
 export function getRecommendationLanes(userId) {
@@ -242,11 +264,22 @@ export function getRecommendationLanes(userId) {
 }
 
 export function getEventDetail(userId, eventId) {
-  const cards = buildEventCards({ userId, sort: "recommended" });
-  const detail = cards.find((item) => item.event.id === eventId) ?? null;
-  if (!detail) return null;
-  const related = cards
-    .filter((item) => item.event.id !== eventId && (item.event.category === detail.event.category || item.event.neighborhoodId === detail.event.neighborhoodId))
+  // Resolve the event directly by id. The recommendation pool is deduped and
+  // built from a different (unfiltered) query than Discover, so the exact id a
+  // card linked to may have lost a dedupe tie there — looking it up by id makes
+  // the detail page immune to that (only a genuinely missing event 404s).
+  const event = findEventById(eventId);
+  if (!event) return null;
+
+  const pool = buildEventCards({ userId, sort: "recommended" });
+  const detail = pool.find((item) => item.event.id === eventId) ?? buildCardsFromEvents(userId, [event])[0];
+
+  const related = pool
+    .filter(
+      (item) =>
+        item.event.id !== detail.event.id &&
+        (item.event.category === detail.event.category || item.event.neighborhoodId === detail.event.neighborhoodId),
+    )
     .slice(0, 3);
   return { data: detail, related };
 }

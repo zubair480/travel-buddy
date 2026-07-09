@@ -49,19 +49,22 @@ export function listNeighborhoods() {
 }
 
 export function listEvents(filters = {}) {
-  const conditions = [`status = 'published'`];
+  // Columns are qualified with `events.` because the query joins `venues` and
+  // `neighborhoods`, and `neighborhood_id` exists on both `events` and `venues`
+  // (a bare reference is an "ambiguous column name" error at runtime).
+  const conditions = [`events.status = 'published'`];
   const values = [];
 
   if (filters.date) {
-    conditions.push(`substr(start_at, 1, 10) = ?`);
+    conditions.push(`substr(events.start_at, 1, 10) = ?`);
     values.push(filters.date);
   } else {
     if (filters.startDate) {
-      conditions.push(`substr(start_at, 1, 10) >= ?`);
+      conditions.push(`substr(events.start_at, 1, 10) >= ?`);
       values.push(filters.startDate);
     }
     if (filters.endDate) {
-      conditions.push(`substr(start_at, 1, 10) <= ?`);
+      conditions.push(`substr(events.start_at, 1, 10) <= ?`);
       values.push(filters.endDate);
     }
   }
@@ -81,19 +84,19 @@ export function listEvents(filters = {}) {
     values.push(pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern, pattern);
   }
   if (filters.categories?.length) {
-    conditions.push(`category IN (${filters.categories.map(() => "?").join(", ")})`);
+    conditions.push(`events.category IN (${filters.categories.map(() => "?").join(", ")})`);
     values.push(...filters.categories);
   }
   if (filters.neighborhoodIds?.length) {
-    conditions.push(`neighborhood_id IN (${filters.neighborhoodIds.map(() => "?").join(", ")})`);
+    conditions.push(`events.neighborhood_id IN (${filters.neighborhoodIds.map(() => "?").join(", ")})`);
     values.push(...filters.neighborhoodIds);
   }
   if (filters.excludeSourceProviders?.length) {
-    conditions.push(`source_provider NOT IN (${filters.excludeSourceProviders.map(() => "?").join(", ")})`);
+    conditions.push(`events.source_provider NOT IN (${filters.excludeSourceProviders.map(() => "?").join(", ")})`);
     values.push(...filters.excludeSourceProviders);
   }
   if (!filters.includePast && !filters.date && !filters.startDate && !filters.endDate) {
-    conditions.push(`substr(start_at, 1, 10) >= ?`);
+    conditions.push(`substr(events.start_at, 1, 10) >= ?`);
     values.push(new Date().toISOString().slice(0, 10));
   }
 

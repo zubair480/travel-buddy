@@ -31,6 +31,10 @@ export function toEventCard(card: BackendEventCard): EventCard {
     endsAt: event.endAt,
     venueName: venue?.name || "Venue TBA",
     address: venueAddress || "Address TBA",
+    // Carry coordinates through so the planner route map has locations to plot;
+    // fall back to the neighborhood centroid when a venue has none.
+    latitude: venue?.latitude ?? neighborhood?.centroidLat ?? null,
+    longitude: venue?.longitude ?? neighborhood?.centroidLng ?? null,
     neighborhood: neighborhood?.name || "San Francisco",
     neighborhoodSlug: neighborhood?.slug || "",
     category: event.category || "community",

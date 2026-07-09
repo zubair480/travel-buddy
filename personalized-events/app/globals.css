@@ -394,6 +394,15 @@ h3 {
   width: 100%;
 }
 
+.route-map-empty {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+  min-height: 260px;
+  padding: 20px;
+  text-align: center;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

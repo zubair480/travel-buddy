@@ -22,6 +22,8 @@ export interface EventCard {
   endsAt: string;
   venueName: string;
   address: string;
+  latitude?: number | null;
+  longitude?: number | null;
   neighborhood: Neighborhood;
   neighborhoodSlug?: string;
   category: string;

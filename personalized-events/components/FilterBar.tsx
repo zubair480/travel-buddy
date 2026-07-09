@@ -1,5 +1,6 @@
 "use client";
 
+import type { FormEvent } from "react";
 import type { EventFilters, FilterOption } from "@/lib/types";
 
 interface FilterBarProps {
@@ -7,9 +8,12 @@ interface FilterBarProps {
   categoryOptions: FilterOption[];
   neighborhoodOptions: FilterOption[];
   onChange: (filters: EventFilters) => void;
+  onApply: () => void;
+  isDirty?: boolean;
+  isApplying?: boolean;
 }
 
-export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onChange }: FilterBarProps) {
+export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onChange, onApply, isDirty = false, isApplying = false }: FilterBarProps) {
   function addDays(dateIso: string, days: number) {
     const base = new Date(dateIso);
     if (Number.isNaN(base.getTime())) return "";
@@ -25,11 +29,18 @@ export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onCha
       next.endDate = addDays(patch.startDate, 6);
     }
 
+    // If the range would be inverted, snap the end to the start so a single-day
+    // selection (e.g. 7/9 to 7/9) is respected instead of being widened to a week.
     if (next.startDate && next.endDate && next.endDate < next.startDate) {
-      next.endDate = addDays(next.startDate, 6);
+      next.endDate = next.startDate;
     }
 
     onChange(next);
+  }
+
+  function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    onApply();
   }
 
   function resetToThisWeek() {
@@ -42,7 +53,7 @@ export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onCha
   }
 
   return (
-    <section className="toolbar" aria-label="Event filters">
+    <form className="toolbar" aria-label="Event filters" onSubmit={handleSubmit}>
       <div className="field">
         <label htmlFor="search">Search</label>
         <input
@@ -105,6 +116,12 @@ export function FilterBar({ filters, categoryOptions, neighborhoodOptions, onCha
           This week
         </button>
       </div>
-    </section>
+      <div className="field field-action">
+        <label aria-hidden="true">&nbsp;</label>
+        <button className="button" type="submit" disabled={!isDirty || isApplying}>
+          {isApplying ? "Applying…" : isDirty ? "Apply filters" : "Filters applied"}
+        </button>
+      </div>
+    </form>
   );
 }

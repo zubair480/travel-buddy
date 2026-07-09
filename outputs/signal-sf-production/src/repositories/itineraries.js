@@ -77,6 +77,20 @@ export function deletePlanItem(planId, itemId) {
 }
 
 export function reorderPlanItems(planId, itemIdsInOrder) {
-  const stmt = getDb().prepare(`UPDATE itinerary_items SET sort_order = ? WHERE plan_id = ? AND id = ?`);
-  itemIdsInOrder.forEach((itemId, index) => stmt.run(index + 1, planId, itemId));
+  const db = getDb();
+  const stmt = db.prepare(`UPDATE itinerary_items SET sort_order = ? WHERE plan_id = ? AND id = ?`);
+  // Two passes inside a transaction: the UNIQUE(plan_id, sort_order) index means a
+  // single-pass rewrite collides whenever the new order shares a slot with an
+  // as-yet-unmoved row (e.g. swapping two items). First park every row at a
+  // negative slot (which can never clash with the positive slots), then assign
+  // the final 1-based order.
+  db.exec("BEGIN");
+  try {
+    itemIdsInOrder.forEach((itemId, index) => stmt.run(-(index + 1), planId, itemId));
+    itemIdsInOrder.forEach((itemId, index) => stmt.run(index + 1, planId, itemId));
+    db.exec("COMMIT");
+  } catch (error) {
+    db.exec("ROLLBACK");
+    throw error;
+  }
 }
