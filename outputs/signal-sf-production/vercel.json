@@ -1,9 +1,9 @@
 {
   "version": 2,
+  "nodeVersion": "22.x",
   "buildCommand": "npm install",
   "functions": {
-    "api/**/*.js": {
-      "runtime": "nodejs22.x",
+    "api/index.js": {
       "maxDuration": 30
     }
   },
